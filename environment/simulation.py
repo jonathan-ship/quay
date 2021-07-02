@@ -40,12 +40,13 @@ class Ship:
 
 
 class Quay:
-    def __init__(self, env, name, model, length, score_table):
+    def __init__(self, env, name, model, length, score_table, monitor):
         self.env = env
         self.name = name
         self.model = model
         self.length = length
         self.scores = score_table.to_dict()
+        self.monitor = monitor
 
         self.queue = simpy.Store(env)
         self.decision = None
@@ -99,12 +100,13 @@ class Quay:
 
 
 class Sea:
-    def __init__(self, env, model):
+    def __init__(self, env, model, monitor):
         self.env = env
         self.name = "S"
         self.model = model
-        self.queue = simpy.Store(env)
+        self.monitor = monitor
 
+        self.queue = simpy.Store(env)
         self.decision = {}
         self.ship_in_sea = {}
         self.action = self.env.process(self.run())

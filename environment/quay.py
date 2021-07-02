@@ -43,11 +43,13 @@ class QuayScheduling:
             ships.append(ship)
 
         quays = {}
+        quays["Source"] = Source(sim_env, ships, quays, monitor)
         for i, row in self.df_quay.iterrows():
             scores = df_score[row["안벽"]]
-            quay = Quay(row["안벽"], row["길이"], scores)
+            quay = Quay(sim_env, row["안벽"], quays, row["길이"], scores, monitor)
             quays[row["안벽"]] = quay
-        quays["Sink"] = Sink(env, quays, monitor)
+        quays["S"] = Sea(sim_env, quays, monitor)
+        quays["Sink"] = Sink(sim_env, quays, monitor)
 
         return sim_env, ships, quays, monitor
 
