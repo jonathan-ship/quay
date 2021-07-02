@@ -16,6 +16,7 @@ class Work:
         self.duration = duration
 
         self.working_time = self.finish - self.start + 1
+        self.done = False
         self.progress = 0.0
         self.quay = None
 
@@ -49,11 +50,12 @@ class Quay:
         self.queue = simpy.Store(env)
         self.decision = None
         self.occupied = False
+        self.cut_possible = False
         self.working_start = 0.0
 
-        self.action = self.env.process(self._run())
+        self.action = self.env.process(self.run())
 
-    def _run(self):
+    def run(self):
         while True:
             ship = yield self.queue.get()
             self.occupied = True
@@ -65,6 +67,7 @@ class Quay:
                     working_time = ship.current_work.duration_fix
                 else:
                     working_time = ship.current_work.working_time - ship.current_work.progress
+                    self.cut_possible = True
 
             try:
                 yield self.env.timeout(working_time)
@@ -72,20 +75,27 @@ class Quay:
             except simpy.Interrupt as i:
                 ship.current_work.progress += (self.env.now - self.working_start)
                 quay_name = i.cause
+                self.model[quay_name].queue.put(ship)
             else:
-                self.decision = self.env.event()
-                quay_name = yield self.decision
-                self.decision = None
-
-            self.occupied = False
-            if not ship.stopped:
+                ship.current_work.done = True
                 ship.fix_idx += 1
                 ship.current_work = ship.work_list[ship.fix_idx]
 
-            self.model[quay_name].queue.put(ship)
+                cnt = sum([1 for value in self.model.values() if value.name != "S"
+                           and (not value.occupied or value.cut_possible)])
+                if cnt == 0:
+                    self.model["S"].queue.put(ship)
+                else:
+                    self.decision = self.env.event()
+                    quay_1, quay_2 = yield self.decision
+                    self.decision = None
+                    self.model[quay_1].queue.put(ship)
 
-            if self.model[quay_name].occupied:
-                self.model[quay_name].action.interrupt(self.name)
+                    if quay_2:
+                        self.model[quay_1].action.interrupt(quay_2)
+
+            self.occupied = False
+            self.cut_possible = False
 
 
 class Sea:
@@ -95,18 +105,42 @@ class Sea:
         self.model = model
         self.queue = simpy.Store(env)
 
+        self.decision = {}
         self.ship_in_sea = {}
-        self.action = self.env.process(self._run())
+        self.action = self.env.process(self.run())
 
-    def _run(self):
+    def run(self):
         while True:
-            self.ship_in_sea[] = yield self.queue.get()
-            if ship.current_work.name == "시운전":
-                self.env.process(self.sea_trial(ship))
+            ship = yield self.queue.get()
+            self.ship_in_sea[ship.name] = ship
+            self.env.process(self.sub_run(self.ship_in_sea[ship.name]))
 
-    def sea_trial(self, ship):
-        yield self.env.timeout(ship.current_work.working_time)
-        while
+    def sub_run(self, ship):
+        self.ship_in_sea[ship.name] = ship
+        while self.ship_in_sea.get(ship.name):
+            if ship.current_work.done:
+                working_time = 1
+            else:
+                working_time = ship.current_work.working_time
+
+            yield self.env.timeout(working_time)
+            if not ship.current_work.done:
+                ship.current_work.done = True
+                ship.fix_idx += 1
+                ship.current_work = ship.work_list[ship.fix_idx]
+
+            cnt = sum([1 for value in self.model.values() if value.name != "S"
+                       and (not value.occupied or value.cut_possible)])
+            if cnt != 0:
+                self.decision[ship.name] = self.env.event()
+                quay_1, quay_2 = yield self.decision[ship.name]
+                self.decision = {}
+                self.model[quay_1].queue.put(ship)
+
+                if quay_2:
+                    self.model[quay_1].action.interrupt(quay_2)
+
+                del self.ship_in_sea[ship.name]
 
 
 class Source:
@@ -119,9 +153,9 @@ class Source:
 
         self.sent = 0
         self.decision = None
-        self.action = env.process(self._run())
+        self.action = env.process(self.run())
 
-    def _run(self):
+    def run(self):
         while True:
             ship = self.ships[self.sent]
 
@@ -132,10 +166,18 @@ class Source:
             if ship.fix_idx == 0:
                 self.monitor.record(self.env.now, "launching", self.name, ship.name, None)
 
-            self.decision = self.env.event()
-            quay_name = yield self.decision
-            self.decision = None
-            self.model[quay_name].queue.put(ship)
+            cnt = sum([1 for value in self.model.values() if value.name != "S"
+                       and (not value.occupied or value.cut_possible)])
+            if cnt == 0:
+                self.model["S"].queue.put(ship)
+            else:
+                self.decision = self.env.event()
+                quay_1, quay_2 = yield self.decision
+                self.decision = None
+                self.model[quay_1].queue.put(ship)
+
+                if quay_2:
+                    self.model[quay_1].action.interrupt(quay_2)
 
             self.sent += 1
 
