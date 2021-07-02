@@ -2,6 +2,9 @@ import os
 import simpy
 import pandas as pd
 
+decision_point = False
+target = None
+
 
 class Work:
     def __init__(self, name, start, finish, cut, duration_fix, duration):
@@ -13,6 +16,7 @@ class Work:
         self.duration = duration
 
         self.working_time = self.finish - self.start + 1
+        self.progress = 0.0
         self.quay = None
 
 
@@ -31,17 +35,19 @@ class Ship:
                                self.total_duration * (int(row["종료(%)"] - int(row["착수(%)"]))) / 100)
                           for i, row in work_table.iterrows()]
         self.current_work = self.work_list[self.fix_idx]
+        self.stopped = False
 
 
 class Quay:
-    def __init__(self, env, model, name, length, score_table):
+    def __init__(self, env, name, model, length, score_table):
         self.env = env
-        self.model = model
         self.name = name
+        self.model = model
         self.length = length
         self.scores = score_table.to_dict()
 
         self.queue = simpy.Store(env)
+        self.decision = None
         self.occupied = False
         self.working_start = 0.0
 
@@ -50,20 +56,57 @@ class Quay:
     def _run(self):
         while True:
             ship = yield self.queue.get()
-            ship.current_work = ship.work_list[ship.fix_idx]
-            ship.current_work.quay = self.name
             self.occupied = True
 
             if ship.current_work.cut == "N":
                 working_time = ship.current_work.duration
             else:
-                working_time = ship.current_work.duration_fix
+                if ship.current_work.progress < ship.current_work.duration_fix:
+                    working_time = ship.current_work.duration_fix
+                else:
+                    working_time = ship.current_work.working_time - ship.current_work.progress
 
             try:
                 yield self.env.timeout(working_time)
                 ship.current_work.progress += working_time
-            except simpy.Interrupt:
+            except simpy.Interrupt as i:
                 ship.current_work.progress += (self.env.now - self.working_start)
+                quay_name = i.cause
+            else:
+                self.decision = self.env.event()
+                quay_name = yield self.decision
+                self.decision = None
+
+            self.occupied = False
+            if not ship.stopped:
+                ship.fix_idx += 1
+                ship.current_work = ship.work_list[ship.fix_idx]
+
+            self.model[quay_name].queue.put(ship)
+
+            if self.model[quay_name].occupied:
+                self.model[quay_name].action.interrupt(self.name)
+
+
+class Sea:
+    def __init__(self, env, model):
+        self.env = env
+        self.name = "S"
+        self.model = model
+        self.queue = simpy.Store(env)
+
+        self.ship_in_sea = {}
+        self.action = self.env.process(self._run())
+
+    def _run(self):
+        while True:
+            self.ship_in_sea[] = yield self.queue.get()
+            if ship.current_work.name == "시운전":
+                self.env.process(self.sea_trial(ship))
+
+    def sea_trial(self, ship):
+        yield self.env.timeout(ship.current_work.working_time)
+        while
 
 
 class Source:
@@ -74,11 +117,13 @@ class Source:
         self.model = model
         self.monitor = monitor
 
+        self.sent = 0
+        self.decision = None
         self.action = env.process(self._run())
 
     def _run(self):
         while True:
-            ship = self.ships.pop(0)
+            ship = self.ships[self.sent]
 
             IAT = ship.current_work.start - self.env.now
             if IAT > 0:
@@ -87,10 +132,14 @@ class Source:
             if ship.fix_idx == 0:
                 self.monitor.record(self.env.now, "launching", self.name, ship.name, None)
 
-            quay = ship.current_work.quay
-            self.model[quay].put(ship)
+            self.decision = self.env.event()
+            quay_name = yield self.decision
+            self.decision = None
+            self.model[quay_name].queue.put(ship)
 
-            if len(self.ships) == 0:
+            self.sent += 1
+
+            if self.sent == len(self.ships):
                 print("All ships are sent.")
                 break
 
