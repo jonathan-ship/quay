@@ -1,4 +1,5 @@
 import simpy
+import numpy as np
 
 from simulation import *
 
@@ -21,7 +22,15 @@ class QuayScheduling:
         pass
 
     def _get_State(self):
-        pass
+        # 배정된 선박의 안벽 선택 정보
+        f_1 = np.zeros(len(self.df_score.columns)+2)
+        # 해당 선박을 그 안벽에 집어 넣을 수 있는지 (자르기 여부까지 고려)
+        f_2 = np.zeros(len())
+        #
+        f_3 = np.zeros()
+
+        state = np.concatenate()
+        return state
 
     def _calculate_reward(self):
         pass
