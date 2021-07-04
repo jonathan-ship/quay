@@ -12,14 +12,26 @@ class QuayScheduling:
         self.df_ship = df_ship
         self.df_work_fix = df_work_fix
         self.log_path = log_path
+        self.done = False
 
         self.sim_env, self.ships, self.quays, self.monitor = self._modeling()
 
-    def step(self):
-        pass
+    def step(self, action):
+        # simulation 진행
+        reward = self._calculate_reward()
+        next_state = self._get_State()
+        return next_state, reward, self.done
 
     def reset(self):
-        pass
+        self.sim_env, self.ships, self.quays, self.monitor = self._modeling()
+        self.done = False
+
+        while True:
+            if self.ships[0].current_work.start == self.sim_env.now:
+                break
+            self.sim_env.step()
+
+        return self._get_State()
 
     def _get_State(self):
         # 배정된 선박의 안벽 선택 정보
@@ -33,7 +45,9 @@ class QuayScheduling:
         return state
 
     def _calculate_reward(self):
+        reward = 0
         pass
+        return reward
 
     def _modeling(self):
         sim_env = simpy.Environment()
