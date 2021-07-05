@@ -166,42 +166,42 @@ class Sea:
 
 class Source:
     def __init__(self, env, ships, model, monitor):
-        self.env = env
+        self.env = env  # simpy 시뮬레이션 환경
         self.name = 'Source'
-        self.ships = ships
-        self.model = model
-        self.monitor = monitor
+        self.ships = ships  # 전체 선박 리스트
+        self.model = model  # 전체 안벽에 대한 정보(모든 Quay 클래스의 객체를 갖고 있는 딕셔너리)
+        self.monitor = monitor  # 이벤트의 기록을 위한 Monitor 클래스의 객체
 
-        self.sent = 0
-        self.decision = None
+        self.sent = 0  # 진수(L/C)된 선박 수
+        self.decision = None  # 강화학습 에이전트의 의사 결정 시점인 decision point를 알려주는 simpy event 객체
         self.action = env.process(self.run())
 
     def run(self):
         while True:
-            ship = self.ships[self.sent]
+            ship = self.ships[self.sent]  # 진수 선박
 
-            IAT = ship.current_work.start - self.env.now
+            IAT = ship.current_work.start - self.env.now  # 현재 시점부터 선박의 진수까지 남은 기간
+            # 남은 기간 동안 대기
             if IAT > 0:
                 yield self.env.timeout(ship.current_work.working_time - self.env.now)
 
             if ship.fix_idx == 0:
                 self.monitor.record(self.env.now, "launching", self.name, ship.name, None)
 
-            cnt = sum([1 for value in self.model.values() if value.name != "S"
-                       and (not value.occupied or value.cut_possible)])
-            if cnt == 0:
-                self.model["S"].queue.put(ship)
-            else:
-                self.decision = self.env.event()
-                quay_1, quay_2 = yield self.decision
+            determined = False
+            while not determined:
+                self.decision = self.env.event()  # decision point에 도달했음을 알리는 이벤트 생성
+                quay_name, determined = yield self.decision  # 해당 이벤트를 발생시키고 에이전트로부터 이동할 안벽 변호를 받음
                 self.decision = None
-                self.model[quay_1].queue.put(ship)
+                self.model[quay_name].queue.put(ship)  # 입력 받은 안벽으로 선박을 이동
 
-                if quay_2:
-                    self.model[quay_1].action.interrupt(quay_2)
+                # 이동할 안벽이 정해졌을 때, 이동할 안벽에 다른 작업이 수행 중이면 해당 작업을 중단
+                if quay_name and self.model[quay_name].occupied:
+                    self.model[quay_name].action.interrupt()
 
             self.sent += 1
 
+            # 모든 선박이 진수된 경우 시뮬레이션 종료
             if self.sent == len(self.ships):
                 print("All ships are sent.")
                 break
@@ -209,13 +209,13 @@ class Source:
 
 class Sink:
     def __init__(self, env, model, monitor):
-        self.env = env
+        self.env = env  # simpy 시뮬레이션 환경
         self.name = 'Sink'
-        self.model = model
-        self.monitor = monitor
+        self.model = model  # 전체 안벽에 대한 정보(모든 Quay 클래스의 객체를 갖고 있는 딕셔너리)
+        self.monitor = monitor  # 이벤트의 기록을 위한 Monitor 클래스의 객체
 
-        self.ships_rec = 0
-        self.last_delivery = 0.0
+        self.ships_rec = 0  # 인도(D/L)된 선박 수
+        self.last_delivery = 0.0  # 가장 마지막 선박이 인도된 시점
 
     def put(self, ship):
         self.ships_rec += 1
@@ -224,13 +224,13 @@ class Sink:
 
 class Monitor(object):
     def __init__(self, filepath):
-        self.filepath = filepath
+        self.filepath = filepath  # 이벤트 로그 파일 생성 경로
 
-        self.time = []
-        self.event = []
-        self.quay_name = []
-        self.ship_name = []
-        self.work_name = []
+        self.time = []  # 이벤트 발생 시각
+        self.event = []  # 발생된 이벤트 종류
+        self.quay_name = []  # 이벤트가 발생된 프로세스(Quay, Sea, Source, Sink)
+        self.ship_name = []  # 발생된 이벤트와 관련된 선박의 호선 번호
+        self.work_name = []  # 발생된 이벤트와 관련된 작업
 
     def record(self, time=0.0, event="launching", quay_name="A1", ship_name="PROJ_01", work_name="화물창작업"):
         self.time.append(time)
@@ -281,10 +281,9 @@ if __name__ == "__main__":
     quays["Source"] = Source(env, ships, quays, monitor)
     for i, row in df_quay.iterrows():
         scores = df_score[row["안벽"]]
-        quay = Quay(row["안벽"], row["길이"], scores)
+        quay = Quay(env, row["안벽"], quays, row["길이"], scores, monitor)
         quays[row["안벽"]] = quay
+    quays["S"] = Sea(env, quays, monitor)
     quays["Sink"] = Sink(env, quays, monitor)
-
-    print(":D")
 
 
