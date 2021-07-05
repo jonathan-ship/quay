@@ -35,7 +35,6 @@ class Ship:
                                self.total_duration * (int(row["종료(%)"] - int(row["착수(%)"]))) / 100)
                           for i, row in work_table.iterrows()]
         self.current_work = self.work_list[self.fix_idx]  # 현재 수행되고 있는 작업
-        self.stopped = False
 
 
 class Quay:
@@ -48,6 +47,8 @@ class Quay:
         self.monitor = monitor  # 이벤트의 기록을 위한 Monitor 클래스의 객체
 
         self.queue = simpy.Store(env)  # 안벽에서 작업을 수행할 선박을 넣어주는 simpy Store 객체
+        self.ship_in = None  # 현재 안벽에 배치된 선박
+        self.ship_out = None  # 다른 안벽으로 이동해야 하는 선박
         self.decision = None  # 강화학습 에이전트의 의사 결정 시점인 decision point를 알려주는 simpy event 객체
         self.occupied = False  # 안벽의 점유 여부
         self.cut_possible = False  # 현재 안벽에서 수행되는 작업에 대한 자르기 가능 여부
@@ -57,109 +58,110 @@ class Quay:
 
     def run(self):
         while True:
-            ship = yield self.queue.get()  # 현재 안벽에서 작업을 수행할 선박
+            self.ship_in = yield self.queue.get()  # 현재 안벽에서 작업을 수행할 선박
             self.occupied = True  # 안벽을 점유 상태로 설정
 
-            if ship.current_work.cut == "N":
+            if self.ship_in.current_work.cut == "N":
                 # 자르기 불가(N)
                 # 안벽에서의 작업 시간은 해당 작업의 전체 작업으로 설정됨
-                working_time = ship.current_work.duration
+                working_time = self.ship_in.current_work.duration
             else:
                 # 자르기 가능(S, F)
-                if ship.current_work.progress < ship.current_work.duration_fix:
+                if self.ship_in.current_work.progress < self.ship_in.current_work.duration_fix:
                     # 처음 작업이 시작된 경우, 안벽에서의 작업 시간은 필수 기간에 해당하는 시간으로 설정됨
-                    working_time = ship.current_work.duration_fix
+                    working_time = self.ship_in.current_work.duration_fix
                 else:
                     # 이미 작업이 수행되었으나 자르기 후 다시 시작하는 경우, 안벽에서의 작업 시간은 남은 작업 시간으로 설정됨
                     # 즉, 필수 기간이 끝난 시점에만 안벽 이동 여부를 결정하고 그 이후에는 종료시까지 특정 안벽에서 계속 작업 수행
-                    working_time = ship.current_work.working_time - ship.current_work.progress
+                    working_time = self.ship_in.current_work.working_time - self.ship_in.current_work.progress
                     self.cut_possible = True
 
             try:
                 # 앞서 결정된 작업 시간에 해당하는 시간 동안 작업 수행
                 yield self.env.timeout(working_time)
-                ship.current_work.progress += working_time
-            except simpy.Interrupt as i:
+                self.ship_in.current_work.progress += working_time
+            except simpy.Interrupt:
                 # 다른 안벽(ex. A 안벽)에서 작업 완료된 선박에 의해 현재 안벽(ex. B 안벽)의 작업에 대한 자르기가 이루어진 경우
-                # 현재 안벽(ex. B 안벽)에서 선박의 작업을 중단하고 해당 선박을 다른 안벽(ex. A 안벽)으로 이동
-                ship.current_work.progress += (self.env.now - self.working_start)
-                quay_name = i.cause
-                self.model[quay_name].queue.put(ship)
+                # 현재 안벽(ex. B 안벽)에서 선박의 작업을 중단
+                self.ship_in.current_work.progress += (self.env.now - self.working_start)
+                self.ship_out = self.ship_in
             else:
                 # 작업이 중간에 자르기 없이 완료된 경우
-                ship.current_work.done = True  # 작업의 완료
-                ship.fix_idx += 1  # 다음 작업의 인덱스
-                ship.current_work = ship.work_list[ship.fix_idx]  # 다음으로 수행할 작업을 현재 작업으로 변경
+                self.ship_in.current_work.done = True  # 작업의 완료
+                self.ship_in.fix_idx += 1  # 다음 작업의 인덱스
+                self.ship_in.current_work = self.ship_in.work_list[self.ship_in.fix_idx]  # 다음으로 수행할 작업을 현재 작업으로 변경
 
-                # 다른 안벽으로의 이동 가능 여부 판단
-                # 비어 있는 안벽 또는 진행 중인 작업에 대한 자르기가 가능한 안벽의 수를 count
-                cnt = sum([1 for value in self.model.values() if value.name != "S"
-                           and (not value.occupied or value.cut_possible)])
-
-                if cnt == 0:
-                    # 이동 가능 안벽이 없을 경우, 해상(SEA 객체)으로 이동
-                    self.model["S"].queue.put(ship)
-                else:
-                    # 이동 가능 안벽이 있을 경우, 강화학습 에이전트로부터 이동할 안벽 번호를 받음
-                    self.decision = self.env.event()  # decision point에 도달했음을 알리는 이벤트 생성
-                    quay_1, quay_2 = yield self.decision  # 해당 이벤트를 발생시키고 에이전트로부터 이동할 안벽 변호를 받음
-                    self.decision = None
-                    self.model[quay_1].queue.put(ship)  # 입력 받은 안벽으로 선박을 이동
-
-                    # 만약 이동할 안벽이 빈 안벽이라면, quay_2=None:
-                    # 만약 이동할 안벽에 있는 다른 작업을 중단(자르기)하고 이동해야하는 경우이면, quay_2="현재 안벽 번호"
-                    # 두 안벽에 있는 선박을 맞교환
-                    if quay_2:
-                        self.model[quay_1].action.interrupt(quay_2)
+            # 현재 안벽에 배치된 선박을 이동
+            self.env.process(self.move(self.ship_in))
 
             self.occupied = False
             self.cut_possible = False
 
+    def move(self, ship):
+        determined = False
+        while not determined:
+            self.decision = self.env.event()  # decision point에 도달했음을 알리는 이벤트 생성
+            quay_name, determined = yield self.decision  # 해당 이벤트를 발생시키고 에이전트로부터 이동할 안벽 변호를 받음
+            self.decision = None
+            self.model[quay_name].queue.put(ship)  # 입력 받은 안벽으로 선박을 이동
+
+            # 이동할 안벽이 정해졌을 때, 이동할 안벽에 다른 작업이 수행 중이면 해당 작업을 중단
+            if quay_name and self.model[quay_name].occupied:
+                self.model[quay_name].action.interrupt()
+
+        self.ship_out = None
+
 
 class Sea:
     def __init__(self, env, model, monitor):
-        self.env = env
+        self.env = env  # simpy 시뮬레이션 환경
         self.name = "S"
-        self.model = model
-        self.monitor = monitor
+        self.model = model  # 전체 안벽에 대한 정보(모든 Quay 클래스의 객체를 갖고 있는 딕셔너리)
+        self.monitor = monitor  # 이벤트의 기록을 위한 Monitor 클래스의 객체
 
-        self.queue = simpy.Store(env)
-        self.decision = {}
-        self.ship_in_sea = {}
+        self.queue = simpy.Store(env)  # 해상 작업을 수행할 선박을 넣어주는 simpy Store 객체
+        self.decision = {}  # 강화학습 에이전트의 의사 결정 시점인 decision point를 알려주는 simpy event 객체의 딕셔너리
+        self.ship_in = {}  # 해상에 있는 선박을 담는 딕셔너리
+
         self.action = self.env.process(self.run())
 
     def run(self):
         while True:
-            ship = yield self.queue.get()
-            self.ship_in_sea[ship.name] = ship
-            self.env.process(self.sub_run(self.ship_in_sea[ship.name]))
+            ship = yield self.queue.get()  # 해상 작업을 수행할 선박
+            self.ship_in[ship.name] = ship  # 해당 선박을 선박 딕셔너리에 등록
+            self.env.process(self.sub_run(self.ship_in[ship.name]))
 
     def sub_run(self, ship):
-        self.ship_in_sea[ship.name] = ship
-        while self.ship_in_sea.get(ship.name):
+        # 선박이 해상 작업을 마치고 안벽에 재배치될 때까지 반복
+        while self.ship_in.get(ship.name):
             if ship.current_work.done:
+                # 배치 안벽이 없어서 해상에 정박 중인 경우
+                # 일마다 배치 가능 안벽 결정
                 working_time = 1
             else:
+                # 해상 작업(EX. 시운전)을 수행해야 하는 경우, 작업 시간은 해당 해상 작업의 작업 기간으로 설정
                 working_time = ship.current_work.working_time
 
+            # 앞서 결정된 작업 시간에 해당하는 시간 동안 작업 수행 또는 하루 동안 대기
             yield self.env.timeout(working_time)
+            # 해상 작업이 완료된 경우
             if not ship.current_work.done:
-                ship.current_work.done = True
-                ship.fix_idx += 1
-                ship.current_work = ship.work_list[ship.fix_idx]
+                ship.current_work.done = True  # 작업의 완료
+                ship.fix_idx += 1  # 다음 작업의 인덱스
+                ship.current_work = ship.work_list[ship.fix_idx]  # 다음으로 수행할 작업을 현재 작업으로 변경
 
-            cnt = sum([1 for value in self.model.values() if value.name != "S"
-                       and (not value.occupied or value.cut_possible)])
-            if cnt != 0:
-                self.decision[ship.name] = self.env.event()
-                quay_1, quay_2 = yield self.decision[ship.name]
-                self.decision = {}
-                self.model[quay_1].queue.put(ship)
+            determined = False
+            while not determined:
+                self.decision[ship.name] = self.env.event()  # decision point에 도달했음을 알리는 이벤트 생성
+                quay_name, determined = yield self.decision[ship.name]  # 해당 이벤트를 발생시키고 에이전트로부터 이동할 안벽 변호를 받음
+                del self.decision[ship.name]
+                self.model[quay_name].queue.put(ship)  # 입력 받은 안벽으로 선박을 이동
 
-                if quay_2:
-                    self.model[quay_1].action.interrupt(quay_2)
+                # 이동할 안벽이 정해졌을 때, 이동할 안벽에 다른 작업이 수행 중이면 해당 작업을 중단
+                if quay_name and self.model[quay_name].occupied:
+                    self.model[quay_name].action.interrupt()
 
-                del self.ship_in_sea[ship.name]
+            del self.ship_in[ship.name]
 
 
 class Source:
