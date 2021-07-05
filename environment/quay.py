@@ -13,11 +13,13 @@ class QuayScheduling:
         self.df_work_fix = df_work_fix
         self.log_path = log_path
         self.done = False
+        self.move = 0
 
         self.sim_env, self.ships, self.quays, self.monitor = self._modeling()
 
     def step(self, action):
         # simulation 진행
+        # 다음 event log의 시간이 달라지는 경우 move = 0 으로 reset
         reward = self._calculate_reward()
         next_state = self._get_State()
         return next_state, reward, self.done
@@ -25,6 +27,7 @@ class QuayScheduling:
     def reset(self):
         self.sim_env, self.ships, self.quays, self.monitor = self._modeling()
         self.done = False
+        self.move = 0
 
         while True:
             if self.ships[0].current_work.start == self.sim_env.now:
@@ -34,19 +37,50 @@ class QuayScheduling:
         return self._get_State()
 
     def _get_State(self):
-        # 배정된 선박의 안벽 선택 정보
+        # 의사결정 시점에서 해당 작업의 각 안벽에 대한 선호도
         f_1 = np.zeros(len(self.df_score.columns)+2)
         # 해당 선박을 그 안벽에 집어 넣을 수 있는지 (자르기 여부까지 고려)
-        f_2 = np.zeros(len())
-        #
-        f_3 = np.zeros()
+        f_2 = np.zeros(len(self.df_score.columns)+2)
+        # 해당 안벽에 작업되고 있는 작업의 해당 안벽에서의 선호도
+        f_3 = np.zeros(len(self.df_score.columns)+2)
+        # 이동횟수 변수
+        f_4 = np.zeros(1)
 
-        state = np.concatenate()
+
+        for i, quay in enumerate(self.quays):
+            ship_decision = None
+            work_name = ship_decision.current_work.name  # 해당 안벽에서 작업중인 작업이름
+            category = ship_decision.category
+            f_1[i] = quay.score[category, work_name]
+            if quay.queue.items != None:
+                ship = quay.queue.items[0]  # 해당 안벽에 들어있는 ship 객체
+                work_name = ship.current_work.name  # 해당 안벽에서 작업중인 작업이름
+                category = ship.category    # 해당 안벽에서 작업중인 선박의 선종
+                f_3[i] = quay.scores[category, work_name]    # 해당 안벽에서 작업중인 작업의 안벽에 대한 점수
+
+                if ship.current_work.cut == 'S':
+                    if ship.current_work.progress < ship.current_work.duration - ship.current_work.duration_fix:
+                        f_2[i] = 1
+                elif ship.current_work.cut == 'F':
+                    if ship.current_work.progress > ship.current_work.duration - ship.current_work.duration_fix:
+                        f_2[i] = 1
+            else:
+                f_2[i] = 2
+
+        state = np.concatenate((f_1, f_2, f_3, f_4), axis = 0)
         return state
 
     def _calculate_reward(self):
-        reward = 0
-        pass
+        # 호선이동 횟수 역수할지 - 둘지 고민
+        reward_move_no = self.move
+        # 전문 안벽 배치율
+        reward_prof_quay = 0
+        for i, quay in enumerate(self.quays):
+            if quay.score[quay.queue.items[0].category, quay.queue.items[0].current_work.name] == 'A':
+                reward_prof_quay += 1
+
+        w_1, w_2 = 1, 0
+        reward = w_1 * reward_move_no + w_2 * reward_prof_quay
         return reward
 
     def _modeling(self):
