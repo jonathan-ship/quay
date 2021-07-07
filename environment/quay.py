@@ -18,10 +18,50 @@ class QuayScheduling:
         self.sim_env, self.ships, self.quays, self.monitor = self._modeling()
 
     def step(self, action):
-        # simulation 진행
-        # 다음 event log의 시간이 달라지는 경우 move = 0 으로 reset
+        # Take action at current decision time step
+        quay_with_decision_time_step = []
+        if self.quays['Source'].decision:
+            quay_with_decision_time_step.append('Source')
+        for quay_name in list(self.df_quay['안벽']):
+            if self.quays[quay_name].decision:
+                quay_with_decision_time_step.append(quay_name)
+        ship_with_decision_time_step = list(self.quays['S'].decision.keys())
+
+        if quay_with_decision_time_step and not ship_with_decision_time_step:
+            self.quays[quay_with_decision_time_step[0]].decision.succeed(self.df_quay['안벽'][action], True)
+        elif not quay_with_decision_time_step and ship_with_decision_time_step:
+            self.quays["S"].decision[ship_with_decision_time_step[0]].succeed(self.quays['안벽'][action], True)
+
+        # Run until next decision time step
+        while True:
+            # decision_check_list = []
+            # for quay in self.quays:
+            #     if quay.name == "S":
+            #         temp = quay.decision.keys()
+            #     elif quay.name == "Sink":
+            #         pass
+            #     else :
+            #         decision_check_list.append(quay.decision)
+            # decision_check_list = decision_check_list + temp
+            # unique = decision_check_list.unique()
+
+            # Check whether there is any decision time step
+            quay_with_decision_time_step = []
+            if self.quays['Source'].decision:
+                quay_with_decision_time_step.append('Source')
+            for quay_name in list(self.df_quay['안벽']):
+                if self.quays[quay_name].decision:
+                    quay_with_decision_time_step.append(quay_name)
+            ship_with_decision_time_step = list(self.quays['S'].decision.keys())
+
+            if quay_with_decision_time_step or ship_with_decision_time_step:
+                break
+
+            self.sim_env.step()
+
         reward = self._calculate_reward()
         next_state = self._get_State()
+
         return next_state, reward, self.done
 
     def reset(self):
@@ -29,9 +69,20 @@ class QuayScheduling:
         self.done = False
         self.move = 0
 
+        # Go to first decision time step
         while True:
-            if self.ships[0].current_work.start == self.sim_env.now:
+            # Check whether there is any decision time step
+            quay_with_decision_time_step = []
+            if self.quays['Source'].decision:
+                quay_with_decision_time_step.append('Source')
+            for quay_name in list(self.df_quay['안벽']):
+                if self.quays[quay_name].decision:
+                    quay_with_decision_time_step.append(quay_name)
+            ship_with_decision_time_step = list(self.quays['S'].decision.keys())
+
+            if quay_with_decision_time_step or ship_with_decision_time_step:
                 break
+
             self.sim_env.step()
 
         return self._get_State()
@@ -131,4 +182,7 @@ if __name__ == "__main__":
     df_quay, df_work, df_score, df_ship, df_work_fix = import_data(info_path, scenario_path)
 
     env = QuayScheduling(df_quay, df_work, df_score, df_ship, df_work_fix, log_path)
+
+    env.reset()
+
     print("d")
