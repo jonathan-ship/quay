@@ -1,3 +1,5 @@
+import random
+
 import simpy
 import numpy as np
 
@@ -28,9 +30,9 @@ class QuayScheduling:
         ship_with_decision_time_step = list(self.quays['S'].decision.keys())
 
         if quay_with_decision_time_step and not ship_with_decision_time_step:
-            self.quays[quay_with_decision_time_step[0]].decision.succeed(self.df_quay['안벽'][action], True)
+            self.quays[quay_with_decision_time_step[0]].decision.succeed((self.df_quay['안벽'][action], True))
         elif not quay_with_decision_time_step and ship_with_decision_time_step:
-            self.quays["S"].decision[ship_with_decision_time_step[0]].succeed(self.quays['안벽'][action], True)
+            self.quays["S"].decision[ship_with_decision_time_step[0]].succeed((self.df_quay['안벽'][action], True))
 
         # Run until next decision time step
         while True:
@@ -59,8 +61,8 @@ class QuayScheduling:
 
             self.sim_env.step()
 
-        reward = self._calculate_reward()
-        next_state = self._get_State()
+        reward = 4 #self._calculate_reward()
+        next_state = 4 #self._get_state()
 
         return next_state, reward, self.done
 
@@ -85,9 +87,9 @@ class QuayScheduling:
 
             self.sim_env.step()
 
-        return self._get_State()
+        return 3 #self._get_state()
 
-    def _get_State(self):
+    def _get_state(self):
         # 의사결정 시점에서 해당 작업의 각 안벽에 대한 선호도
         f_1 = np.zeros(len(self.df_score.columns)+2)
         # 해당 선박을 그 안벽에 집어 넣을 수 있는지 (자르기 여부까지 고려)
@@ -183,6 +185,15 @@ if __name__ == "__main__":
 
     env = QuayScheduling(df_quay, df_work, df_score, df_ship, df_work_fix, log_path)
 
-    env.reset()
+    done = False
+    state = env.reset()
+    r = []
 
-    print("d")
+    while not done:
+        action = np.random.randint(20)
+
+        next_state, reward, done = env.step(action)
+        r.append(reward)
+        state = next_state
+
+        print(env.quays["Source"].sent)
