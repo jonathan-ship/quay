@@ -49,6 +49,7 @@ class Quay:
         self.queue = simpy.Store(env)  # 안벽에서 작업을 수행할 선박을 넣어주는 simpy Store 객체
         self.ship_in = None  # 현재 안벽에 배치된 선박
         self.ship_out = None  # 다른 안벽으로 이동해야 하는 선박
+        self.waiting = False  # 의사 결정을 대기하는 이벤트의 존재 여부
         self.decision = None  # 강화학습 에이전트의 의사 결정 시점인 decision point를 알려주는 simpy event 객체
         self.occupied = False  # 안벽의 점유 여부
         self.cut_possible = False  # 현재 안벽에서 수행되는 작업에 대한 자르기 가능 여부
@@ -100,6 +101,7 @@ class Quay:
     def move(self, ship):
         determined = False
         while not determined:
+            self.waiting = True
             self.decision = self.env.event()  # decision point에 도달했음을 알리는 이벤트 생성
             quay_name, determined = yield self.decision  # 해당 이벤트를 발생시키고 에이전트로부터 이동할 안벽 변호를 받음
             self.decision = None
@@ -120,6 +122,7 @@ class Sea:
         self.monitor = monitor  # 이벤트의 기록을 위한 Monitor 클래스의 객체
 
         self.queue = simpy.Store(env)  # 해상 작업을 수행할 선박을 넣어주는 simpy Store 객체
+        self.waiting = {}  # 의사 결정을 대기하는 이벤트의 존재 여부
         self.decision = {}  # 강화학습 에이전트의 의사 결정 시점인 decision point를 알려주는 simpy event 객체의 딕셔너리
         self.ship_in = {}  # 해상에 있는 선박을 담는 딕셔너리
 
@@ -152,6 +155,7 @@ class Sea:
 
             determined = False
             while not determined:
+                self.waiting[ship.name] = True
                 self.decision[ship.name] = self.env.event()  # decision point에 도달했음을 알리는 이벤트 생성
                 quay_name, determined = yield self.decision[ship.name]  # 해당 이벤트를 발생시키고 에이전트로부터 이동할 안벽 변호를 받음
                 del self.decision[ship.name]
@@ -173,6 +177,7 @@ class Source:
         self.monitor = monitor  # 이벤트의 기록을 위한 Monitor 클래스의 객체
 
         self.sent = 0  # 진수(L/C)된 선박 수
+        self.waiting = False  # 의사 결정을 대기하는 이벤트의 존재 여부
         self.decision = None  # 강화학습 에이전트의 의사 결정 시점인 decision point를 알려주는 simpy event 객체
         self.action = env.process(self.run())
 
@@ -190,6 +195,7 @@ class Source:
 
             determined = False
             while not determined:
+                self.waiting = True
                 self.decision = self.env.event()  # decision point에 도달했음을 알리는 이벤트 생성
                 quay_name, determined = yield self.decision  # 해당 이벤트를 발생시키고 에이전트로부터 이동할 안벽 변호를 받음
                 self.decision = None

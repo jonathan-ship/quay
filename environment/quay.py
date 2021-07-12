@@ -22,17 +22,19 @@ class QuayScheduling:
     def step(self, action):
         # Take action at current decision time step
         quay_with_decision_time_step = []
-        if self.quays['Source'].decision:
+        if self.quays['Source'].waiting:
             quay_with_decision_time_step.append('Source')
         for quay_name in list(self.df_quay['안벽']):
-            if self.quays[quay_name].decision:
+            if self.quays[quay_name].waiting:
                 quay_with_decision_time_step.append(quay_name)
-        ship_with_decision_time_step = list(self.quays['S'].decision.keys())
+        ship_with_decision_time_step = list(self.quays['S'].waiting.keys())
 
         if quay_with_decision_time_step and not ship_with_decision_time_step:
             self.quays[quay_with_decision_time_step[0]].decision.succeed((self.df_quay['안벽'][action], True))
+            self.quays[quay_with_decision_time_step[0]].waiting = False
         elif not quay_with_decision_time_step and ship_with_decision_time_step:
             self.quays["S"].decision[ship_with_decision_time_step[0]].succeed((self.df_quay['안벽'][action], True))
+            del self.quays["S"].decision[ship_with_decision_time_step[0]]
 
         # Run until next decision time step
         while True:
@@ -49,12 +51,12 @@ class QuayScheduling:
 
             # Check whether there is any decision time step
             quay_with_decision_time_step = []
-            if self.quays['Source'].decision:
+            if self.quays['Source'].waiting:
                 quay_with_decision_time_step.append('Source')
             for quay_name in list(self.df_quay['안벽']):
-                if self.quays[quay_name].decision:
+                if self.quays[quay_name].waiting:
                     quay_with_decision_time_step.append(quay_name)
-            ship_with_decision_time_step = list(self.quays['S'].decision.keys())
+            ship_with_decision_time_step = list(self.quays['S'].waiting.keys())
 
             if quay_with_decision_time_step or ship_with_decision_time_step:
                 break
@@ -63,6 +65,9 @@ class QuayScheduling:
 
         reward = 4 #self._calculate_reward()
         next_state = 4 #self._get_state()
+
+        if self.quays["Source"].sent == len(self.df_ship):
+            self.done = True
 
         return next_state, reward, self.done
 
