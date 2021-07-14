@@ -180,6 +180,7 @@ class Source:
         self.waiting = False  # 의사 결정을 대기하는 이벤트의 존재 여부
         self.decision = None  # 강화학습 에이전트의 의사 결정 시점인 decision point를 알려주는 simpy event 객체
         self.action = env.process(self.run())
+        self.waiting_ships = []     # 의사결정 대기중인 선박
 
     def run(self):
         while True:
@@ -196,6 +197,7 @@ class Source:
             determined = False
             while not determined:
                 self.waiting = True
+                self.waiting_ships.append(ship)
                 self.decision = self.env.event()  # decision point에 도달했음을 알리는 이벤트 생성
                 quay_name, determined = yield self.decision  # 해당 이벤트를 발생시키고 에이전트로부터 이동할 안벽 변호를 받음
                 self.decision = None

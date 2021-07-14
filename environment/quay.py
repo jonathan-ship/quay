@@ -6,6 +6,22 @@ import numpy as np
 from simulation import *
 
 
+def score_converter(categorical_score):
+    if categorical_score == 'A':
+        numerical_score = 5
+    elif categorical_score == 'B':
+        numerical_score = 4
+    elif categorical_score == 'C':
+        numerical_score = 3
+    elif categorical_score == 'D':
+        numerical_score = 2
+    elif categorical_score == 'E':
+        numerical_score = 1
+    else:  # 'N'
+        numerical_score = -1
+
+    return numerical_score
+
 class QuayScheduling:
     def __init__(self, df_quay, df_work, df_score, df_ship, df_work_fix, log_path):
         self.df_quay = df_quay
@@ -38,17 +54,6 @@ class QuayScheduling:
 
         # Run until next decision time step
         while True:
-            # decision_check_list = []
-            # for quay in self.quays:
-            #     if quay.name == "S":
-            #         temp = quay.decision.keys()
-            #     elif quay.name == "Sink":
-            #         pass
-            #     else :
-            #         decision_check_list.append(quay.decision)
-            # decision_check_list = decision_check_list + temp
-            # unique = decision_check_list.unique()
-
             # Check whether there is any decision time step
             quay_with_decision_time_step = []
             if self.quays['Source'].waiting:
@@ -61,13 +66,27 @@ class QuayScheduling:
             if quay_with_decision_time_step or ship_with_decision_time_step:
                 break
 
+            if self.quays["Sink"].ships_rec == len(self.df_ship):
+                self.done = True
+                self.sim_env.run()
+                break
+
             self.sim_env.step()
 
-        reward = 4 #self._calculate_reward()
-        next_state = 4 #self._get_state()
-
-        if self.quays["Source"].sent == len(self.df_ship):
+        if self.quays["Sink"].ships_rec == len(self.df_ship):
             self.done = True
+            self.sim_env.run()
+
+        if quay_with_decision_time_step and not ship_with_decision_time_step:
+            if quay_with_decision_time_step[0] != 'Source':
+                ongoing_ship = self.quays[quay_with_decision_time_step[0]].ship_in
+            else:
+                ongoing_ship = self.quays['Source'].waiting_ships.pop(0)
+        elif not quay_with_decision_time_step and ship_with_decision_time_step:
+            ongoing_ship = self.quays["S"].ship_in[ship_with_decision_time_step[0]]
+
+        reward = self._calculate_reward()
+        next_state = self._get_state(ongoing_ship)
 
         return next_state, reward, self.done
 
@@ -92,9 +111,17 @@ class QuayScheduling:
 
             self.sim_env.step()
 
-        return 3 #self._get_state()
+        if quay_with_decision_time_step and not ship_with_decision_time_step:
+            if quay_with_decision_time_step[0] != 'Source':
+                ongoing_ship = self.quays[quay_with_decision_time_step[0]].ship_in
+            else:
+                ongoing_ship = self.quays['Source'].waiting_ships.pop(0)
+        elif not quay_with_decision_time_step and ship_with_decision_time_step:
+            ongoing_ship = self.quays["S"].ship_in[ship_with_decision_time_step[0]]
 
-    def _get_state(self):
+        return self._get_state(ongoing_ship)
+
+    def _get_state(self, ongoing_ship):
         # 의사결정 시점에서 해당 작업의 각 안벽에 대한 선호도
         f_1 = np.zeros(len(self.df_score.columns)+2)
         # 해당 선박을 그 안벽에 집어 넣을 수 있는지 (자르기 여부까지 고려)
@@ -104,28 +131,28 @@ class QuayScheduling:
         # 이동횟수 변수
         f_4 = np.zeros(1)
 
+        work_name = ongoing_ship.current_work.name  # 해당 안벽에서 작업중인 작업이름
+        category = ongoing_ship.category
 
-        for i, quay in enumerate(self.quays):
-            ship_decision = None
-            work_name = ship_decision.current_work.name  # 해당 안벽에서 작업중인 작업이름
-            category = ship_decision.category
-            f_1[i] = quay.score[category, work_name]
-            if quay.queue.items != None:
-                ship = quay.queue.items[0]  # 해당 안벽에 들어있는 ship 객체
-                work_name = ship.current_work.name  # 해당 안벽에서 작업중인 작업이름
-                category = ship.category    # 해당 안벽에서 작업중인 선박의 선종
-                f_3[i] = quay.scores[category, work_name]    # 해당 안벽에서 작업중인 작업의 안벽에 대한 점수
+        for i, quay in enumerate(self.quays.values()):
+            if quay.name not in ['Source', 'Sink', 'S']:
+                f_1[i] = score_converter(quay.scores[category, work_name])
+                if quay.ship_in:
+                    ship = quay.ship_in  # 해당 안벽에 들어있는 ship 객체
+                    work_name = ship.current_work.name  # 해당 안벽에서 작업중인 작업이름
+                    category = ship.category    # 해당 안벽에서 작업중인 선박의 선종
+                    f_3[i] = score_converter(quay.scores[category, work_name])    # 해당 안벽에서 작업중인 작업의 안벽에 대한 점수
 
-                if ship.current_work.cut == 'S':
-                    if ship.current_work.progress < ship.current_work.duration - ship.current_work.duration_fix:
-                        f_2[i] = 1
-                elif ship.current_work.cut == 'F':
-                    if ship.current_work.progress > ship.current_work.duration - ship.current_work.duration_fix:
-                        f_2[i] = 1
-            else:
-                f_2[i] = 2
+                    if ship.current_work.cut == 'S':
+                        if ship.current_work.progress < ship.current_work.duration - ship.current_work.duration_fix:
+                            f_2[i] = 1
+                    elif ship.current_work.cut == 'F':
+                        if ship.current_work.progress > ship.current_work.duration - ship.current_work.duration_fix:
+                            f_2[i] = 1
+                else:
+                    f_2[i] = 2
 
-        state = np.concatenate((f_1, f_2, f_3, f_4), axis = 0)
+        state = np.concatenate((f_1, f_2, f_3, f_4), axis=0)
         return state
 
     def _calculate_reward(self):
@@ -133,9 +160,10 @@ class QuayScheduling:
         reward_move_no = self.move
         # 전문 안벽 배치율
         reward_prof_quay = 0
-        for i, quay in enumerate(self.quays):
-            if quay.score[quay.queue.items[0].category, quay.queue.items[0].current_work.name] == 'A':
-                reward_prof_quay += 1
+        for i, quay in enumerate(self.quays.values()):
+            if quay.name not in ['Source', 'Sink', 'S'] and quay.ship_in:
+                if quay.scores[quay.ship_in.category, quay.ship_in.current_work.name] == 'A':
+                    reward_prof_quay += 1
 
         w_1, w_2 = 1, 0
         reward = w_1 * reward_move_no + w_2 * reward_prof_quay
