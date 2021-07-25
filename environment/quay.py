@@ -22,17 +22,20 @@ def score_converter(categorical_score):
 
     return numerical_score
 
+
 class QuayScheduling:
-    def __init__(self, df_quay, df_work, df_score, df_ship, df_work_fix, log_path):
+    def __init__(self, df_quay, df_work, df_score, df_ship, df_work_fix, df_sharing, log_path):
         self.df_quay = df_quay
         self.df_work = df_work
         self.df_score = df_score
         self.df_ship = df_ship
         self.df_work_fix = df_work_fix
+        self.df_sharing = df_sharing
         self.log_path = log_path
         self.done = False
         self.move = 0
 
+        self.
         self.sim_env, self.ships, self.quays, self.monitor = self._modeling()
 
     def step(self, action):
@@ -195,6 +198,12 @@ class QuayScheduling:
         quays["Source"] = Source(sim_env, ships, quays, monitor)  # Source
         for i, row in self.df_quay.iterrows():
             scores = df_score[row["안벽"]]
+
+            shared_idx = self.df_sharing["Quay1"]
+            shared_quay_set = self.df_sharing[(self.df_sharing["Quay1"] == row["안벽"]) |
+                                              (self.df_sharing["Quay2"] == row["안벽"]) |
+                                              (self.df_sharing["Quay3"] == row["안벽"])].dropna(axis=1).tolist()
+
             quay = Quay(sim_env, row["안벽"], quays, row["길이"], scores, monitor)
             quays[row["안벽"]] = quay  # Quay
         quays["S"] = Sea(sim_env, quays, monitor)  # Sea

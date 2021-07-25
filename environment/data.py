@@ -1,7 +1,11 @@
 import pandas as pd
 
 
-def import_data(info_path, scenario_path):
+def import_train_data(file_path):
+    df_work = pd.read_excel(file_path, sheet_name="작업 기준정보", header=1, engine='openpyxl')
+
+
+def import_test_data(info_path, scenario_path):
     df_quay = pd.read_excel(info_path, sheet_name="안벽 기준정보", header=1, engine='openpyxl')
     df_work = pd.read_excel(info_path, sheet_name="작업 기준정보", header=1, engine='openpyxl')
     df_score = pd.read_excel(info_path, sheet_name="안벽작업 기준정보", header=1, engine='openpyxl')
