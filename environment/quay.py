@@ -6,36 +6,17 @@ import numpy as np
 from simulation import *
 
 
-def score_converter(categorical_score):
-    if categorical_score == 'A':
-        numerical_score = 5
-    elif categorical_score == 'B':
-        numerical_score = 4
-    elif categorical_score == 'C':
-        numerical_score = 3
-    elif categorical_score == 'D':
-        numerical_score = 2
-    elif categorical_score == 'E':
-        numerical_score = 1
-    else:  # 'N'
-        numerical_score = -1
-
-    return numerical_score
-
-
 class QuayScheduling:
-    def __init__(self, df_quay, df_work, df_score, df_ship, df_work_fix, df_sharing, log_path):
+    def __init__(self, df_quay, df_score, df_ship, df_work, df_work_fixed, log_path):
         self.df_quay = df_quay
-        self.df_work = df_work
         self.df_score = df_score
         self.df_ship = df_ship
-        self.df_work_fix = df_work_fix
-        self.df_sharing = df_sharing
+        self.df_work = df_work
+        self.df_work_fixed = df_work_fixed
         self.log_path = log_path
         self.done = False
         self.move = 0
 
-        self.
         self.sim_env, self.ships, self.quays, self.monitor = self._modeling()
 
     def step(self, action):
@@ -181,10 +162,10 @@ class QuayScheduling:
         for i, row in self.df_ship.iterrows():
             works = self.df_work[self.df_work["선종"] == row["선종"]]  # 선박의 선종에 해당하는 안벽 작업 데이터프레임 선택
             # 선박의 작업 중 안벽 고정 작업이 있는 지 확인
-            if row["호선번호"] in self.df_work_fix["호선번호"]:
+            if row["호선번호"] in self.df_work_fixed["호선번호"]:
                 # 고정 작업이 있을 경우
-                fix_name = self.df_work_fix[self.df_work_fix["호선번호"] == row["호선번호"]]["작업명"]  # 고정 작업명
-                fix_idx = int(works[works["작업"] == fix_name]["순번"]) - 1  # 선박의 작업 리스트 중 고정 작업의 순서 index
+                fix_name = self.df_work_fixed[self.df_work_fixed["호선번호"] == row["호선번호"]]["작업명"]  # 고정 작업명
+                fix_idx = int(works[works["작업명"] == fix_name]["순번"]) - 1  # 선박의 작업 리스트 중 고정 작업의 순서 index
             else:
                 # 고정 작업이 없을 경우
                 fix_idx = 0
@@ -198,13 +179,11 @@ class QuayScheduling:
         quays["Source"] = Source(sim_env, ships, quays, monitor)  # Source
         for i, row in self.df_quay.iterrows():
             scores = df_score[row["안벽"]]
-
-            shared_idx = self.df_sharing["Quay1"]
-            shared_quay_set = self.df_sharing[(self.df_sharing["Quay1"] == row["안벽"]) |
-                                              (self.df_sharing["Quay2"] == row["안벽"]) |
-                                              (self.df_sharing["Quay3"] == row["안벽"])].dropna(axis=1).tolist()
-
-            quay = Quay(sim_env, row["안벽"], quays, row["길이"], scores, monitor)
+            shared_quay_set = []
+            for j in range(1, 4):
+                if row["공유{0}".format(j)]:
+                    shared_quay_set.append(row["공유{0}".format(j)])
+            quay = Quay(sim_env, row["안벽"], quays, row["길이"], shared_quay_set, scores, monitor)
             quays[row["안벽"]] = quay  # Quay
         quays["S"] = Sea(sim_env, quays, monitor)  # Sea
         quays["Sink"] = Sink(sim_env, quays, monitor)  # Sink
@@ -214,18 +193,18 @@ class QuayScheduling:
 
 if __name__ == "__main__":
 
-    from data import import_data
+    from data import *
 
-    info_path = "./data/기준정보+위탁과제용.xlsx"
-    scenario_path = "./data/[수정] 호선일정정보+위탁과제.xlsx"
+    info_path = "./data/기준정보.xlsx"
+    scenario_path = "./data/호선정보_학습.xlsx"
 
     log_path = '../result/log.csv'
     if not os.path.exists(log_path):
         os.makedirs(log_path)
 
-    df_quay, df_work, df_score, df_ship, df_work_fix = import_data(info_path, scenario_path)
+    df_quay, df_score, df_ship, df_work, df_work_fix = import_train_data(info_path, scenario_path)
 
-    env = QuayScheduling(df_quay, df_work, df_score, df_ship, df_work_fix, log_path)
+    env = QuayScheduling(df_quay, df_score, df_ship, df_work, df_work_fix, log_path)
 
     done = False
     state = env.reset()

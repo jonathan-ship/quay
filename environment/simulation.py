@@ -5,13 +5,12 @@ import pandas as pd
 
 
 class Work:
-    def __init__(self, name, start, finish, cut, duration_fix, duration):
+    def __init__(self, name, start, finish, cut, duration_fix):
         self.name = name  # 작업의 이름
         self.start = start  # 작업의 시작일
         self.finish = finish  # 작업의 종료일
         self.cut = cut  # 자르기 종류(N, S, F)
         self.duration_fix = duration_fix  # 필수 기간
-        self.duration = duration
 
         self.working_time = self.finish - self.start + 1 # 전체 작업 기간(작업의 종료일 - 작업의 시작일 + 1)
         self.done = False  # 작업 종료 여부
@@ -33,8 +32,7 @@ class Ship:
         self.total_duration = self.delivery_date - self.launching_date + 1  # 모든 안벽 작업을 완료하기 위해 필요한 작업 기간
         # 선박에 대한 안벽 작업 리스트 (Work 클래스로 구성된 리스트 형태)
         # 데이터프레임 형태의 안벽 작업 리스트를 바탕으로 Work 클래스의 객체로 구성된 안벽 작업 리스트를 생성
-        self.work_list = [Work(row["작업"], row["착수(%)"], row["종료(%)"], row["자르기"], row["필수기간"],
-                               self.total_duration * (int(row["종료(%)"] - int(row["착수(%)"]))) / 100)
+        self.work_list = [Work(row["작업명"], row["시작일"], row["종료일"], row["자르기"], row["필수기간"])
                           for i, row in work_table.iterrows()]
         self.current_work = self.work_list[self.fix_idx]  # 현재 수행되고 있는 작업
         self.wait = False
@@ -88,7 +86,6 @@ class Routing:
                 self.model[next_quay].action.interrupt()
 
     def update_possible_quay(self):
-        sharing = [("B2", "B3"), ("C1", "C3"), ("C2", "C4"), ("D3", "D5"), ("D1", "D2", "D4")]
         for key, value in self.model.items():
             if key in ["Source", "Sink", "Routing"]:
                 continue
@@ -221,7 +218,7 @@ class Quay:
         self.queue = simpy.Store(env)  # 안벽에서 작업을 수행할 선박을 넣어주는 simpy Store 객체
         self.ship = None  # 현재 안벽에 배치된 선박
         self.occupied = False  # 안벽의 점유 여부
-        self.length_occupied = [0 for _ in range(len(self.shared_quay_set) + 1)]
+        self.length_occupied = [0 for _ in range(len(self.shared_quay_set))]
         self.position = self.shared_quay_set.index(self.name)
         self.cut_possible = False  # 현재 안벽에서 수행되는 작업에 대한 자르기 가능 여부
         self.working_start = 0.0  # 현재 안벽 작업의 시작 시간
