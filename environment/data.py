@@ -57,6 +57,9 @@ def import_train_data(info_path, scenario_path):
     df_work_fixed['시작일'] = (df_work_fixed['시작일'] - start).dt.days
     df_work_fixed['종료일'] = (df_work_fixed['종료일'] - start).dt.days
 
+    df_ship = df_ship.sort_values(by=["진수일"])
+    df_ship = df_ship.reset_index(drop=True)
+
     df_work["자르기"] = df_work.apply(
         lambda x: df_work_temp[(df_work_temp["선종"] == x["선종"])
                                & (df_work_temp["작업"] == x["작업명"])]["자르기"].tolist()[0], axis=1)

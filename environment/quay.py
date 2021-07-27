@@ -14,96 +14,56 @@ class QuayScheduling:
         self.df_work = df_work
         self.df_work_fixed = df_work_fixed
         self.log_path = log_path
-        self.done = False
-        self.move = 0
 
-        self.sim_env, self.ships, self.quays, self.monitor = self._modeling()
+        self.move = 0
+        self.action_mapping = {i: row["안벽"] for i, row in self.df_quay.iterrows()}
+        self.sim_env, self.ships, self.model, self.monitor = self._modeling()
 
     def step(self, action):
+        done = False
         # Take action at current decision time step
-        quay_with_decision_time_step = []
-        if self.quays['Source'].waiting:
-            quay_with_decision_time_step.append('Source')
-        for quay_name in list(self.df_quay['안벽']):
-            if self.quays[quay_name].waiting:
-                quay_with_decision_time_step.append(quay_name)
-        ship_with_decision_time_step = list(self.quays['S'].waiting.keys())
-
-        if quay_with_decision_time_step and not ship_with_decision_time_step:
-            self.quays[quay_with_decision_time_step[0]].decision.succeed((self.df_quay['안벽'][action], True))
-            self.quays[quay_with_decision_time_step[0]].waiting = False
-        elif not quay_with_decision_time_step and ship_with_decision_time_step:
-            self.quays["S"].decision[ship_with_decision_time_step[0]].succeed((self.df_quay['안벽'][action], True))
-            del self.quays["S"].decision[ship_with_decision_time_step[0]]
+        quay_name = self.action_mapping[action]
+        print(quay_name)
+        self.model["Routing"].decision.succeed(quay_name)
+        self.model["Routing"].indicator = False
 
         # Run until next decision time step
         while True:
             # Check whether there is any decision time step
-            quay_with_decision_time_step = []
-            if self.quays['Source'].waiting:
-                quay_with_decision_time_step.append('Source')
-            for quay_name in list(self.df_quay['안벽']):
-                if self.quays[quay_name].waiting:
-                    quay_with_decision_time_step.append(quay_name)
-            ship_with_decision_time_step = list(self.quays['S'].waiting.keys())
 
-            if quay_with_decision_time_step or ship_with_decision_time_step:
+            if self.model["Routing"].indicator:
+                print(self.model["Routing"].decision)
                 break
 
-            if self.quays["Sink"].ships_rec == len(self.df_ship):
+            if self.model["Sink"].ships_rec == len(self.df_ship):
                 self.done = True
                 self.sim_env.run()
                 break
 
             self.sim_env.step()
 
-        if self.quays["Sink"].ships_rec == len(self.df_ship):
-            self.done = True
+        if self.model["Sink"].ships_rec == len(self.df_ship):
             self.sim_env.run()
+            done = True
 
-        if quay_with_decision_time_step and not ship_with_decision_time_step:
-            if quay_with_decision_time_step[0] != 'Source':
-                ongoing_ship = self.quays[quay_with_decision_time_step[0]].ship_in
-            else:
-                ongoing_ship = self.quays['Source'].waiting_ships.pop(0)
-        elif not quay_with_decision_time_step and ship_with_decision_time_step:
-            ongoing_ship = self.quays["S"].ship_in[ship_with_decision_time_step[0]]
+        reward = 2#self._calculate_reward()
+        next_state = 2#self._get_state(ongoing_ship)
 
-        reward = self._calculate_reward()
-        next_state = self._get_state(ongoing_ship)
-
-        return next_state, reward, self.done
+        return next_state, reward, done
 
     def reset(self):
-        self.sim_env, self.ships, self.quays, self.monitor = self._modeling()
+        self.sim_env, self.ships, self.model, self.monitor = self._modeling()
         self.done = False
         self.move = 0
 
         # Go to first decision time step
         while True:
             # Check whether there is any decision time step
-            quay_with_decision_time_step = []
-            if self.quays['Source'].decision:
-                quay_with_decision_time_step.append('Source')
-            for quay_name in list(self.df_quay['안벽']):
-                if self.quays[quay_name].decision:
-                    quay_with_decision_time_step.append(quay_name)
-            ship_with_decision_time_step = list(self.quays['S'].decision.keys())
-
-            if quay_with_decision_time_step or ship_with_decision_time_step:
+            if self.model["Routing"].indicator:
                 break
-
             self.sim_env.step()
 
-        if quay_with_decision_time_step and not ship_with_decision_time_step:
-            if quay_with_decision_time_step[0] != 'Source':
-                ongoing_ship = self.quays[quay_with_decision_time_step[0]].ship_in
-            else:
-                ongoing_ship = self.quays['Source'].waiting_ships.pop(0)
-        elif not quay_with_decision_time_step and ship_with_decision_time_step:
-            ongoing_ship = self.quays["S"].ship_in[ship_with_decision_time_step[0]]
-
-        return self._get_state(ongoing_ship)
+        return 2 #self._get_state(ongoing_ship)
 
     def _get_state(self, ongoing_ship):
         # 의사결정 시점에서 해당 작업의 각 안벽에 대한 선호도
@@ -160,7 +120,7 @@ class QuayScheduling:
         # 안벽 배치 대상 선박에 대한 리스트 생성
         ships = []
         for i, row in self.df_ship.iterrows():
-            works = self.df_work[self.df_work["선종"] == row["선종"]]  # 선박의 선종에 해당하는 안벽 작업 데이터프레임 선택
+            works = self.df_work[self.df_work["호선번호"] == row["호선번호"]]  # 선박의 선종에 해당하는 안벽 작업 데이터프레임 선택
             # 선박의 작업 중 안벽 고정 작업이 있는 지 확인
             if row["호선번호"] in self.df_work_fixed["호선번호"]:
                 # 고정 작업이 있을 경우
@@ -175,20 +135,21 @@ class QuayScheduling:
             ships.append(ship)
 
         # 시뮬레이션 프로세스 모델링
-        quays = {}
-        quays["Source"] = Source(sim_env, ships, quays, monitor)  # Source
+        model = {}
+        model["Source"] = Source(sim_env, ships, model, monitor)  # Source
         for i, row in self.df_quay.iterrows():
             scores = df_score[row["안벽"]]
             shared_quay_set = []
             for j in range(1, 4):
                 if row["공유{0}".format(j)]:
                     shared_quay_set.append(row["공유{0}".format(j)])
-            quay = Quay(sim_env, row["안벽"], quays, row["길이"], shared_quay_set, scores, monitor)
-            quays[row["안벽"]] = quay  # Quay
-        quays["S"] = Sea(sim_env, quays, monitor)  # Sea
-        quays["Sink"] = Sink(sim_env, quays, monitor)  # Sink
+            quay = Quay(sim_env, row["안벽"], model, row["길이"], shared_quay_set, scores, monitor)
+            model[row["안벽"]] = quay  # Quay
+        model["S"] = Sea(sim_env, model, monitor)  # Sea
+        model["Routing"] = Routing(sim_env, model, monitor)  # Routing
+        model["Sink"] = Sink(sim_env, model, monitor)  # Sink
 
-        return sim_env, ships, quays, monitor
+        return sim_env, ships, model, monitor
 
 
 if __name__ == "__main__":
@@ -217,4 +178,4 @@ if __name__ == "__main__":
         r.append(reward)
         state = next_state
 
-        print(env.quays["Source"].sent)
+        print(env.model["Sink"].ships_rec)
