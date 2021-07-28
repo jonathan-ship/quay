@@ -73,7 +73,10 @@ class Routing:
                 self.decision = None
 
                 if next_quay == "S":
-                    self.ship.wait = True
+                    if self.ship.current_work.name == "시운전" or self.ship.current_work.name == "G/T":
+                        self.ship.wait = False
+                    else:
+                        self.ship.wait = True
                 else:
                     self.ship.wait = False
                     if self.model[next_quay].occupied:

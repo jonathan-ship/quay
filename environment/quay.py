@@ -23,7 +23,6 @@ class QuayScheduling:
         done = False
         # Take action at current decision time step
         quay_name = self.action_mapping[action]
-        print(quay_name)
         self.model["Routing"].decision.succeed(quay_name)
         self.model["Routing"].indicator = False
 
@@ -32,7 +31,6 @@ class QuayScheduling:
             # Check whether there is any decision time step
 
             if self.model["Routing"].indicator:
-                print(self.model["Routing"].decision)
                 break
 
             if self.model["Sink"].ships_rec == len(self.df_ship):
