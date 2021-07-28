@@ -68,16 +68,14 @@ class Routing:
 
                 current_quay = self.ship.current_work.quay
 
-                self.decision = self.env.event()  # decision point에 도달했음을 알리는 이벤트 생성
-                next_quay = yield self.decision  # 해당 이벤트를 발생시키고 에이전트로부터 이동할 안벽 변호를 받음
+                self.decision = self.env.event()
+                next_quay = yield self.decision
                 self.decision = None
 
                 if next_quay == "S":
                     self.ship.wait = True
                 else:
                     self.ship.wait = False
-
-                    # 이동할 안벽이 정해졌을 때, 이동할 안벽에 다른 작업이 수행 중이면 해당 작업을 중단
                     if self.model[next_quay].occupied:
                         self.model[next_quay].action.interrupt()
 
