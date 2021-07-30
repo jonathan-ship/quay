@@ -16,14 +16,15 @@ class QuayScheduling:
         self.log_path = log_path
 
         self.move = 0
-        self.action_mapping = {i: row["안벽"] for i, row in self.df_quay.iterrows()}
-        self.action_mapping[len(self.df_quay)] = "S"
+        self.mapping = {i: row["안벽"] for i, row in self.df_quay.iterrows()}
+        self.mapping[len(self.df_quay)] = "S"
+        self.inverse_mapping = {y: x for x, y in self.mapping.items()}
         self.sim_env, self.ships, self.model, self.monitor = self._modeling()
 
     def step(self, action):
         done = False
         # Take action at current decision time step
-        quay_name = self.action_mapping[action]
+        quay_name = self.mapping[action]
         self.model["Routing"].decision.succeed(quay_name)
         self.model["Routing"].indicator = False
 
