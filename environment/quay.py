@@ -15,6 +15,9 @@ class QuayScheduling:
         self.df_work_fixed = df_work_fixed
         self.log_path = log_path
 
+        self.state_space = len(self.df_quay) * 3 + 1
+        self.action_space = len(self.df_quay) + 1
+
         self.move = 0
         self.mapping = {i: row["안벽"] for i, row in self.df_quay.iterrows()}
         self.mapping[len(self.df_quay)] = "S"
@@ -42,7 +45,7 @@ class QuayScheduling:
             self.sim_env.step()
 
         reward = 2#self._calculate_reward()
-        next_state = 2#self._get_state(ongoing_ship)
+        next_state = self._get_state()
 
         return next_state, reward, done
 
@@ -58,38 +61,34 @@ class QuayScheduling:
                 break
             self.sim_env.step()
 
-        return 2 #self._get_state(ongoing_ship)
+        return self._get_state()
 
-    def _get_state(self, ongoing_ship):
+    def _get_state(self):
         # 의사결정 시점에서 해당 작업의 각 안벽에 대한 선호도
-        f_1 = np.zeros(len(self.df_score.columns)+2)
+        f_1 = np.zeros(len(self.df_quay))
         # 해당 선박을 그 안벽에 집어 넣을 수 있는지 (자르기 여부까지 고려)
-        f_2 = np.zeros(len(self.df_score.columns)+2)
+        f_2 = np.zeros(len(self.df_quay))
         # 해당 안벽에 작업되고 있는 작업의 해당 안벽에서의 선호도
-        f_3 = np.zeros(len(self.df_score.columns)+2)
+        f_3 = np.zeros(len(self.df_quay))
         # 이동횟수 변수
         f_4 = np.zeros(1)
 
-        work_name = ongoing_ship.current_work.name  # 해당 안벽에서 작업중인 작업이름
-        category = ongoing_ship.category
+        decision_work_name = self.model["Routing"].ship.current_work.name  # 해당 안벽에서 작업중인 작업이름
+        decision_category = self.model["Routing"].ship.category
 
-        for i, quay in enumerate(self.quays.values()):
-            if quay.name not in ['Source', 'Sink', 'S']:
-                f_1[i] = score_converter(quay.scores[category, work_name])
-                if quay.ship_in:
-                    ship = quay.ship_in  # 해당 안벽에 들어있는 ship 객체
+        for idx, quay_name in self.mapping.items():
+            if quay_name not in ["Routing", "Source", "Sink", "S"]:
+                f_1[idx] = self.model[quay_name].scores[decision_category, decision_work_name]
+                if self.model[quay_name].ship:
+                    ship = self.model[quay_name].ship  # 해당 안벽에 들어있는 ship 객체
                     work_name = ship.current_work.name  # 해당 안벽에서 작업중인 작업이름
                     category = ship.category    # 해당 안벽에서 작업중인 선박의 선종
-                    f_3[i] = score_converter(quay.scores[category, work_name])    # 해당 안벽에서 작업중인 작업의 안벽에 대한 점수
+                    f_3[idx] = self.model[quay_name].scores[category, work_name]    # 해당 안벽에서 작업중인 작업의 안벽에 대한 점수
 
-                    if ship.current_work.cut == 'S':
-                        if ship.current_work.progress < ship.current_work.duration - ship.current_work.duration_fix:
-                            f_2[i] = 1
-                    elif ship.current_work.cut == 'F':
-                        if ship.current_work.progress > ship.current_work.duration - ship.current_work.duration_fix:
-                            f_2[i] = 1
+                    if self.model[quay_name].cut_possible:
+                        f_2[idx] = 1
                 else:
-                    f_2[i] = 2
+                    f_2[idx] = 2
 
         state = np.concatenate((f_1, f_2, f_3, f_4), axis=0)
         return state
@@ -99,8 +98,8 @@ class QuayScheduling:
         reward_move_no = self.move
         # 전문 안벽 배치율
         reward_prof_quay = 0
-        for i, quay in enumerate(self.quays.values()):
-            if quay.name not in ['Source', 'Sink', 'S'] and quay.ship_in:
+        for i, quay in enumerate(self.model.values()):
+            if quay.name not in ["Routing", "Source", "Sink", "S"] and quay.ship_in:
                 if quay.scores[quay.ship_in.category, quay.ship_in.current_work.name] == 'A':
                     reward_prof_quay += 1
 
@@ -133,7 +132,7 @@ class QuayScheduling:
         model = {}
         model["Source"] = Source(sim_env, ships, model, monitor)  # Source
         for i, row in self.df_quay.iterrows():
-            scores = df_score[row["안벽"]]
+            scores = self.df_score[row["안벽"]]
             shared_quay_set = []
             for j in range(1, 4):
                 if row["공유{0}".format(j)]:
@@ -173,6 +172,4 @@ if __name__ == "__main__":
         r.append(reward)
         state = next_state
 
-        print(env.model["Sink"].ships_rec)
-        print(env.model["Routing"].ship.name)
-        print(env.model["Routing"].possible_quay)
+        print(next_state)

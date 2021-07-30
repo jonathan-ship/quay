@@ -271,7 +271,10 @@ class Quay:
                 if self.ship.current_work.progress == 0:
                     if self.ship.current_work.duration_fix < self.ship.current_work.working_time:
                         # 처음 작업이 시작된 경우, 안벽에서의 작업 시간은 필수 기간에 해당하는 시간으로 설정됨
-                        working_time = self.ship.current_work.duration_fix
+                        if self.ship.current_work.cut == "S":
+                            working_time = self.ship.current_work.working_time - self.ship.current_work.duration_fix
+                        else:
+                            working_time = self.ship.current_work.duration_fix
                     else:
                         working_time = self.ship.current_work.working_time
                 else:
