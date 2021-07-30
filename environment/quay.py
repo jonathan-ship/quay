@@ -17,6 +17,7 @@ class QuayScheduling:
 
         self.move = 0
         self.action_mapping = {i: row["안벽"] for i, row in self.df_quay.iterrows()}
+        self.action_mapping[len(self.df_quay)] = "S"
         self.sim_env, self.ships, self.model, self.monitor = self._modeling()
 
     def step(self, action):
@@ -29,20 +30,15 @@ class QuayScheduling:
         # Run until next decision time step
         while True:
             # Check whether there is any decision time step
-
             if self.model["Routing"].indicator:
                 break
 
             if self.model["Sink"].ships_rec == len(self.df_ship):
-                self.done = True
+                done = True
                 self.sim_env.run()
                 break
 
             self.sim_env.step()
-
-        if self.model["Sink"].ships_rec == len(self.df_ship):
-            self.sim_env.run()
-            done = True
 
         reward = 2#self._calculate_reward()
         next_state = 2#self._get_state(ongoing_ship)
@@ -170,10 +166,12 @@ if __name__ == "__main__":
     r = []
 
     while not done:
-        action = np.random.randint(20)
+        action = np.random.randint(29)
 
         next_state, reward, done = env.step(action)
         r.append(reward)
         state = next_state
 
         print(env.model["Sink"].ships_rec)
+        print(env.model["Routing"].ship.name)
+        print(env.model["Routing"].possible_quay)
