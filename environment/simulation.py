@@ -49,9 +49,9 @@ class Routing:
         self.ship = None
         self.indicator = False
         self.decision = None
+        self.move = None
         self.quay = []
-        self.possible_quay = []
-        self.move_count = []
+        self.possible_quay = {}
         self.queue = simpy.Store(env)
 
         self.action = self.env.process(self.run())
@@ -87,23 +87,26 @@ class Routing:
                 if current_quay != next_quay:
                     self.check_narrow_quay(current_quay)
                     self.check_narrow_quay(next_quay)
+                    self.move = [self.ship.category, next_quay]
                     if self.ship.current_work.done:
                         self.move_count.append((self.ship.name, 1))
 
                 self.move(self.ship, next_quay)
+                yield self.model[next_quay].queue.put(self.ship)
                 self.ship = None
 
     def update_possible_quay(self):
-        self.possible_quay = []
+        self.possible_quay = {}
         for key, value in self.model.items():
             if key in ["Source", "Sink", "Routing"]:
                 continue
             elif key == "S":
-                self.possible_quay.append(key)
+                self.possible_quay[key] = 3
             else:
-                if (value.occupied and value.cut_possible and self.check_shared_quay(key)) \
-                        or (not value.occupied and self.check_shared_quay(key)):
-                    self.possible_quay.append(key)
+                if value.occupied and value.cut_possible and self.check_shared_quay(key):
+                    self.possible_quay[key] = 1
+                elif not value.occupied and self.check_shared_quay(key):
+                    self.possible_quay[key] = 2
 
     def check_shared_quay(self, name):
         res = False
@@ -224,7 +227,7 @@ class Routing:
                             self.model[i].length_occupied[idx] = self.model[i].length - sum(self.model[i].length_occupied)
                             remain -= self.model[i].length - sum(self.model[i].length_occupied)
 
-        self.model[next_quay].queue.put(self.ship)  # 입력 받은 안벽으로 선박을 이동
+        # self.model[next_quay].queue.put(self.ship)  # 입력 받은 안벽으로 선박을 이동
 
     def remove(self, quay_name):
         self.model[quay_name].occupied = False
@@ -301,9 +304,6 @@ class Quay:
                     self.ship.current_work = self.ship.work_list[self.ship.fix_idx]  # 다음으로 수행할 작업을 현재 작업으로 변경
                 self.interrupted = False
 
-            # 현재 안벽에 배치된 선박을 이동
-            self.model["Routing"].queue.put(self.ship)
-
             if not self.interrupted:
                 self.occupied = False
                 self.cut_possible = False
@@ -314,6 +314,8 @@ class Quay:
                         idx = self.model[i].shared_quay_set.index(self.name)
                         self.model[i].length_occupied[idx] = 0
 
+            # 현재 안벽에 배치된 선박을 이동
+            self.model["Routing"].queue.put(self.ship)
             self.ship = None
 
 

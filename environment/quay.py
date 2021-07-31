@@ -19,6 +19,8 @@ class QuayScheduling:
         self.action_space = len(self.df_quay) + 1
 
         self.move = 0
+        self.w_move = 0.5
+        self.w_efficiency = 0.5
         self.mapping = {i: row["안벽"] for i, row in self.df_quay.iterrows()}
         self.mapping[len(self.df_quay)] = "S"
         self.inverse_mapping = {y: x for x, y in self.mapping.items()}
@@ -79,16 +81,14 @@ class QuayScheduling:
         for idx, quay_name in self.mapping.items():
             if quay_name not in ["Routing", "Source", "Sink", "S"]:
                 f_1[idx] = self.model[quay_name].scores[decision_category, decision_work_name]
-                if self.model[quay_name].ship:
-                    ship = self.model[quay_name].ship  # 해당 안벽에 들어있는 ship 객체
-                    work_name = ship.current_work.name  # 해당 안벽에서 작업중인 작업이름
-                    category = ship.category    # 해당 안벽에서 작업중인 선박의 선종
-                    f_3[idx] = self.model[quay_name].scores[category, work_name]    # 해당 안벽에서 작업중인 작업의 안벽에 대한 점수
 
-                    if self.model[quay_name].cut_possible:
-                        f_2[idx] = 1
-                else:
-                    f_2[idx] = 2
+                if self.model["Routing"].possible_quay.get(quay_name):
+                    f_2[idx] = self.model["Routing"].possible_quay[quay_name]
+
+                if self.model[quay_name].occupied:
+                    category = self.model[quay_name].ship.category  # 해당 안벽에서 작업중인 선박의 선종
+                    work_name = self.model[quay_name].ship.current_work.name  # 해당 안벽에서 작업중인 작업이름
+                    f_3[idx] = self.model[quay_name].scores[category, work_name]
 
         state = np.concatenate((f_1, f_2, f_3, f_4), axis=0)
         return state
@@ -99,8 +99,8 @@ class QuayScheduling:
         # 전문 안벽 배치율
         reward_prof_quay = 0
         for i, quay in enumerate(self.model.values()):
-            if quay.name not in ["Routing", "Source", "Sink", "S"] and quay.ship_in:
-                if quay.scores[quay.ship_in.category, quay.ship_in.current_work.name] == 'A':
+            if quay.name not in ["Routing", "Source", "Sink", "S"] and quay.ship:
+                if quay.scores[quay.ship.category, quay.ship.current_work.name] == 'A':
                     reward_prof_quay += 1
 
         w_1, w_2 = 1, 0
