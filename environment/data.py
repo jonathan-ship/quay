@@ -6,6 +6,7 @@ def import_train_data(info_path, scenario_path):
     df_quay = pd.read_excel(info_path, sheet_name="안벽 기준정보", engine='openpyxl')
     df_work_temp = pd.read_excel(info_path, sheet_name="작업 기준정보", engine='openpyxl')
     df_score = pd.read_excel(info_path, sheet_name="안벽작업 기준정보", engine='openpyxl')
+    df_weight = pd.read_excel(info_path, sheet_name="가중치 정보", engine='openpyxl')
 
     df_ship = pd.read_excel(scenario_path, sheet_name="호선리스트", engine='openpyxl')
     df_work = pd.read_excel(scenario_path, sheet_name="작업리스트", engine='openpyxl')
@@ -42,6 +43,7 @@ def import_train_data(info_path, scenario_path):
             df_quay.loc[i, "공유{0}".format(j + 1)] = quay
 
     df_score = df_score.set_index(["선종", "작업"])
+    df_weight = df_weight.set_index(["선종"])
 
     df_ship['진수일'] = pd.to_datetime(df_ship['진수일'], format='%Y-%m-%d')
     df_ship['인도일'] = pd.to_datetime(df_ship['인도일'], format='%Y-%m-%d')
@@ -67,7 +69,7 @@ def import_train_data(info_path, scenario_path):
         lambda x: df_work_temp[(df_work_temp["선종"] == x["선종"])
                                & (df_work_temp["작업"] == x["작업명"])]["필수기간"].tolist()[0], axis=1)
 
-    return df_quay, df_score, df_ship, df_work, df_work_fixed
+    return df_quay, df_score, df_weight, df_ship, df_work, df_work_fixed
 
 
 def import_test_data(info_path, scenario_path):

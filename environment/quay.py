@@ -7,9 +7,10 @@ from simulation import *
 
 
 class QuayScheduling:
-    def __init__(self, df_quay, df_score, df_ship, df_work, df_work_fixed, log_path):
+    def __init__(self, df_quay, df_score, df_weight, df_ship, df_work, df_work_fixed, log_path):
         self.df_quay = df_quay
         self.df_score = df_score
+        self.df_weight = df_weight
         self.df_ship = df_ship
         self.df_work = df_work
         self.df_work_fixed = df_work_fixed
@@ -46,7 +47,7 @@ class QuayScheduling:
 
             self.sim_env.step()
 
-        reward = 2#self._calculate_reward()
+        reward = self._calculate_reward()
         next_state = self._get_state()
 
         return next_state, reward, done
@@ -85,7 +86,7 @@ class QuayScheduling:
                 if self.model["Routing"].possible_quay.get(quay_name):
                     f_2[idx] = self.model["Routing"].possible_quay[quay_name]
 
-                if self.model[quay_name].occupied:
+                if self.model[quay_name].occupied and int(self.model[quay_name].back) == 0:
                     category = self.model[quay_name].ship.category  # 해당 안벽에서 작업중인 선박의 선종
                     work_name = self.model[quay_name].ship.current_work.name  # 해당 안벽에서 작업중인 작업이름
                     f_3[idx] = self.model[quay_name].scores[category, work_name]
@@ -94,17 +95,26 @@ class QuayScheduling:
         return state
 
     def _calculate_reward(self):
-        # 호선이동 횟수 역수할지 - 둘지 고민
-        reward_move_no = self.move
-        # 전문 안벽 배치율
-        reward_prof_quay = 0
-        for i, quay in enumerate(self.model.values()):
-            if quay.name not in ["Routing", "Source", "Sink", "S"] and quay.ship:
-                if quay.scores[quay.ship.category, quay.ship.current_work.name] == 'A':
-                    reward_prof_quay += 1
+        ship_category = self.model["Routing"].move["ship_category"]
+        work_category = self.model["Routing"].move["work_category"]
+        previous_quay = self.model["Routing"].move["previous"]
+        current_quay = self.model["Routing"].move["current"]
+        loss = self.model["Routing"].move["loss"]
 
-        w_1, w_2 = 1, 0
-        reward = w_1 * reward_move_no + w_2 * reward_prof_quay
+        # 호선이동 횟수 역수할지 - 둘지 고민
+        reward_move = 0
+        if loss:
+            reward_move = -7
+        else:
+            if previous_quay != current_quay:
+                reward_move = self.df_weight["가중치"][ship_category]
+        # 전문 안벽 배치율
+        reward_eff = 0
+        if current_quay != "S":
+            reward_eff = self.model[current_quay].scores[ship_category, work_category]
+
+        reward = self.w_move * reward_move + self.w_efficiency * reward_eff
+
         return reward
 
     def _modeling(self):
@@ -157,19 +167,22 @@ if __name__ == "__main__":
     if not os.path.exists(log_path):
         os.makedirs(log_path)
 
-    df_quay, df_score, df_ship, df_work, df_work_fix = import_train_data(info_path, scenario_path)
+    df_quay, df_score, df_weight, df_ship, df_work, df_work_fix = import_train_data(info_path, scenario_path)
 
-    env = QuayScheduling(df_quay, df_score, df_ship, df_work, df_work_fix, log_path)
+    env = QuayScheduling(df_quay, df_score, df_weight, df_ship, df_work, df_work_fix, log_path)
 
     done = False
     state = env.reset()
     r = []
 
     while not done:
-        action = np.random.randint(29)
+        possible_action = env.model["Routing"].possible_quay
+        possible_action = [env.inverse_mapping[key] for key in possible_action.keys()]
+        action = random.choice(possible_action)
 
         next_state, reward, done = env.step(action)
         r.append(reward)
         state = next_state
 
+        print(reward)
         print(next_state)
