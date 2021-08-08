@@ -156,7 +156,8 @@ class Routing:
 
     def check_narrow_quay(self, name):
         if name == "B1":
-            if self.model["A4"].occupied and self.model["B2"].occupied:
+            if (self.model["A4"].occupied and self.model["B2"].occupied) and \
+                    (self.model["A4"].ship != None and self.model["B2"].ship != None):
                 if self.model["A4"].cut_possible and not self.model["B2"].cut_possible:
                     self.model["A4"].ship.interrupted = True
                     self.remove("A4")
@@ -184,7 +185,7 @@ class Routing:
                         self.model["B2"].ship.interrupted = True
                         self.model["B2"].action.interrupt("1")
         elif name == "F1":
-            if self.model["D1"].occupied:
+            if self.model["D1"].occupied and self.model["D1"].ship != None:
                 if self.model["D1"].cut_possible:
                     self.model["D1"].ship.interrupted = True
                     self.remove("D1")
