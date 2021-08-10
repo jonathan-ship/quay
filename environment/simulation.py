@@ -116,10 +116,11 @@ class Routing:
                     if key in ["Source", "Sink", "Routing", "S"]:
                         continue
                     else:
-                        if value.occupied and value.cut_possible and self.check_shared_quay(key):
-                            self.possible_quay[key] = 1
-                        elif not value.occupied and self.check_shared_quay(key):
-                            self.possible_quay[key] = 2
+                        if self.model[key].scores[self.ship.category, self.ship.current_work.name] != 0.0:
+                            if value.occupied and value.cut_possible and self.check_shared_quay(key):
+                                self.possible_quay[key] = 1
+                            elif not value.occupied and self.check_shared_quay(key):
+                                self.possible_quay[key] = 2
                 if len(self.possible_quay) == 0:
                     self.possible_quay["S"] = 3
 

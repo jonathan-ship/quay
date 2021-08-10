@@ -24,6 +24,7 @@ class QuayScheduling:
                           if row["작업명"] != "시운전" and row["작업명"] != "G/T"])
         self.cnt_day = 0
         self.cnt_total = 0
+        self.max_cnt_total = sum([df_weight["가중치"][row["선종"]] for i, row in self.df_work.iterrows()])
         self.move_constraint = 5
         self.time = 0.0
         self.w_move = 0.5
@@ -45,7 +46,7 @@ class QuayScheduling:
         self.model["Routing"].indicator = False
 
         if self.model["Routing"].current_quay != quay_name:
-            self.cnt_total += 1
+            self.cnt_total += self.df_weight["가중치"][ship_category]
             self.cnt_day += 1
         if quay_name != "S":
             self.total_score += self.model[quay_name].scores[ship_category, work_category]
@@ -112,7 +113,7 @@ class QuayScheduling:
                     f_3[idx] = self.model[quay_name].scores[category, work_name]
 
         f_4[0] = self.cnt_day / self.move_constraint
-        f_5[0] = self.cnt_total / len(self.df_work)
+        f_5[0] = self.cnt_total / self.max_cnt_total
         f_5[1] = self.total_score / self.max_score
 
         state = np.concatenate((f_1, f_2, f_3, f_4, f_5), axis=0)
