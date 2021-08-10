@@ -3,7 +3,7 @@ import random
 import simpy
 import numpy as np
 
-from simulation import *
+from environment.simulation import *
 
 
 class QuayScheduling:
@@ -107,7 +107,7 @@ class QuayScheduling:
             reward_move = -7
         else:
             if previous_quay != current_quay:
-                reward_move = self.df_weight["가중치"][ship_category]
+                reward_move = - self.df_weight["가중치"][ship_category]
         # 전문 안벽 배치율
         reward_eff = 0
         if current_quay != "S":
