@@ -28,6 +28,8 @@ class QuayScheduling:
         self.time = 0.0
         self.w_move = 0.5
         self.w_efficiency = 0.5
+        self.reward_move = 0.0
+        self.reward_efficiency =0.0
         self.mapping = {i: row["안벽"] for i, row in self.df_quay.iterrows()}
         self.mapping[len(self.df_quay)] = "S"
         self.inverse_mapping = {y: x for x, y in self.mapping.items()}
@@ -134,6 +136,8 @@ class QuayScheduling:
         if current_quay != "S":
             reward_eff = self.model[current_quay].scores[ship_category, work_category]
 
+        self.reward_move = reward_move
+        self.reward_efficiency = reward_eff
         reward = self.w_move * reward_move + self.w_efficiency * reward_eff
 
         return reward
