@@ -90,11 +90,11 @@ class Routing:
                         self.model[next_quay].action.interrupt("0")
                     self.check_narrow_quay(current_quay)
                     self.check_narrow_quay(next_quay)
-                    self.move = {"ship_category": self.ship.category, "work_category": self.ship.current_work.name,
-                                 "previous": current_quay, "current": next_quay, "loss": self.loss}
                 else:
                     if self.ship.interrupted:
                         self.loss = True
+                self.move = {"ship_category": self.ship.category, "work_category": self.ship.current_work.name,
+                             "previous": current_quay, "current": next_quay, "loss": self.loss}
 
                 self.ship.interrupted = False
                 self.put(self.ship, next_quay)

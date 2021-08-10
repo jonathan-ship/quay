@@ -16,10 +16,16 @@ class QuayScheduling:
         self.df_work_fixed = df_work_fixed
         self.log_path = log_path
 
-        self.state_space = len(self.df_quay) * 3 + 1
+        self.state_space = len(self.df_quay) * 3 + 3
         self.action_space = len(self.df_quay) + 1
 
-        self.move = 0
+        self.total_score = 0.0
+        self.max_score = sum([max(df_score.loc[(row["선종"], row["작업명"])]) for i, row in self.df_work.iterrows()
+                          if row["작업명"] != "시운전" and row["작업명"] != "G/T"])
+        self.cnt_day = 0
+        self.cnt_total = 0
+        self.move_constraint = 5
+        self.time = 0.0
         self.w_move = 0.5
         self.w_efficiency = 0.5
         self.mapping = {i: row["안벽"] for i, row in self.df_quay.iterrows()}
@@ -31,13 +37,23 @@ class QuayScheduling:
         done = False
         # Take action at current decision time step
         quay_name = self.mapping[action]
+        ship_category = self.model["Routing"].ship.category
+        work_category = self.model["Routing"].ship.current_work.name
         self.model["Routing"].decision.succeed(quay_name)
         self.model["Routing"].indicator = False
+        self.cnt_total += 1
+        self.cnt_day += 1
+
+        if quay_name != "S":
+            self.total_score += self.model[quay_name].scores[ship_category, work_category]
 
         # Run until next decision time step
         while True:
             # Check whether there is any decision time step
             if self.model["Routing"].indicator:
+                if self.sim_env.now != self.time:
+                    self.cnt_day = 0
+                    self.time = self.sim_env.now
                 break
 
             if self.model["Sink"].ships_rec == len(self.df_ship):
@@ -49,6 +65,10 @@ class QuayScheduling:
 
         reward = self._calculate_reward()
         next_state = self._get_state()
+
+        if self.cnt_day == self.move_constraint:
+            reward = -100
+            done = True
 
         return next_state, reward, done
 
@@ -67,14 +87,11 @@ class QuayScheduling:
         return self._get_state()
 
     def _get_state(self):
-        # 의사결정 시점에서 해당 작업의 각 안벽에 대한 선호도
-        f_1 = np.zeros(len(self.df_quay))
-        # 해당 선박을 그 안벽에 집어 넣을 수 있는지 (자르기 여부까지 고려)
-        f_2 = np.zeros(len(self.df_quay))
-        # 해당 안벽에 작업되고 있는 작업의 해당 안벽에서의 선호도
-        f_3 = np.zeros(len(self.df_quay))
-        # 이동횟수 변수
-        f_4 = np.zeros(1)
+        f_1 = np.zeros(len(self.df_quay)) # 의사결정 시점에서 해당 작업의 각 안벽에 대한 선호도
+        f_2 = np.zeros(len(self.df_quay)) # 해당 선박을 그 안벽에 집어 넣을 수 있는지 (자르기 여부까지 고려)
+        f_3 = np.zeros(len(self.df_quay)) # 해당 안벽에 작업되고 있는 작업의 해당 안벽에서의 선호도
+        f_4 = np.zeros(1) # 하루 누적 이동횟수
+        f_5 = np.zeros(2) # 시뮬레이션 히스토리
 
         decision_work_name = self.model["Routing"].ship.current_work.name  # 해당 안벽에서 작업중인 작업이름
         decision_category = self.model["Routing"].ship.category
@@ -91,7 +108,11 @@ class QuayScheduling:
                     work_name = self.model[quay_name].ship.current_work.name  # 해당 안벽에서 작업중인 작업이름
                     f_3[idx] = self.model[quay_name].scores[category, work_name]
 
-        state = np.concatenate((f_1, f_2, f_3, f_4), axis=0)
+        f_4[0] = self.cnt_day / self.move_constraint
+        f_5[0] = self.cnt_total / len(self.df_work)
+        f_5[1] = self.total_score / self.max_score
+
+        state = np.concatenate((f_1, f_2, f_3, f_4, f_5), axis=0)
         return state
 
     def _calculate_reward(self):
