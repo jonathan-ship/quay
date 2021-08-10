@@ -43,9 +43,10 @@ class QuayScheduling:
         work_category = self.model["Routing"].ship.current_work.name
         self.model["Routing"].decision.succeed(quay_name)
         self.model["Routing"].indicator = False
-        self.cnt_total += 1
-        self.cnt_day += 1
 
+        if self.model["Routing"].current_quay != quay_name:
+            self.cnt_total += 1
+            self.cnt_day += 1
         if quay_name != "S":
             self.total_score += self.model[quay_name].scores[ship_category, work_category]
 

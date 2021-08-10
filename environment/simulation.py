@@ -54,6 +54,7 @@ class Routing:
         self.loss = False
         self.move = {}
         self.quay = []
+        self.current_quay = None
         self.possible_quay = {}
         self.queue = simpy.Store(env)
 
@@ -62,7 +63,7 @@ class Routing:
     def run(self):
         while True:
             self.ship = yield self.queue.get()
-            current_quay = self.ship.main_quay
+            self.current_quay = self.ship.main_quay
 
             if self.ship.fix_idx == len(self.ship.work_list):
                 self.model["Sink"].put(self.ship)
@@ -83,18 +84,18 @@ class Routing:
                 else:
                     self.ship.wait = False
 
-                if current_quay != next_quay:
+                if self.current_quay != next_quay:
                     if next_quay != "S" and self.model[next_quay].occupied:
                         self.remove(next_quay)
                         self.model[next_quay].ship.interrupted = True
                         self.model[next_quay].action.interrupt("0")
-                    self.check_narrow_quay(current_quay)
+                    self.check_narrow_quay(self.current_quay)
                     self.check_narrow_quay(next_quay)
                 else:
                     if self.ship.interrupted:
                         self.loss = True
                 self.move = {"ship_category": self.ship.category, "work_category": self.ship.current_work.name,
-                             "previous": current_quay, "current": next_quay, "loss": self.loss}
+                             "previous": self.current_quay, "current": next_quay, "loss": self.loss}
 
                 self.ship.interrupted = False
                 self.put(self.ship, next_quay)
