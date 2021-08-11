@@ -91,8 +91,8 @@ class QuayScheduling:
         return self._get_state()
 
     def _get_state(self):
-        f_1 = np.zeros(len(self.df_quay)) # 의사결정 시점에서 해당 작업의 각 안벽에 대한 선호도
-        f_2 = np.zeros(len(self.df_quay)) # 해당 선박을 그 안벽에 집어 넣을 수 있는지 (자르기 여부까지 고려)
+        f_1 = np.zeros(len(self.df_quay))  # 의사결정 시점에서 해당 작업의 각 안벽에 대한 선호도
+        f_2 = np.zeros(len(self.df_quay))  # 안벽 이동 가능 여부 (0.0, 0.25, 0.5, 0.75, 1.0)
         f_3 = np.zeros(len(self.df_quay)) # 해당 안벽에 작업되고 있는 작업의 해당 안벽에서의 선호도
         f_4 = np.zeros(1) # 하루 누적 이동횟수
         f_5 = np.zeros(2) # 시뮬레이션 히스토리
@@ -105,7 +105,15 @@ class QuayScheduling:
                 f_1[idx] = self.model[quay_name].scores[decision_category, decision_work_name]
 
                 if self.model["Routing"].possible_quay.get(quay_name):
-                    f_2[idx] = self.model["Routing"].possible_quay[quay_name]
+                    if self.model["Routing"].possible_quay[quay_name] == 1:
+                        if self.df_weight["가중치"][self.model[quay_name].ship.category] == 3:
+                            f_2[idx] = 0.75
+                        elif self.df_weight["가중치"][self.model[quay_name].ship.category] == 4:
+                            f_2[idx] = 0.5
+                        elif self.df_weight["가중치"][self.model[quay_name].ship.category] == 6:
+                            f_2[idx] = 0.25
+                    elif self.model["Routing"].possible_quay[quay_name] == 2:
+                        f_2[idx] = 1
 
                 if self.model[quay_name].occupied and int(self.model[quay_name].back) == 0:
                     category = self.model[quay_name].ship.category  # 해당 안벽에서 작업중인 선박의 선종
