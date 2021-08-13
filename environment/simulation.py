@@ -118,7 +118,8 @@ class Routing:
                     else:
                         if self.model[key].scores[self.ship.category, self.ship.current_work.name] != 0.0:
                             if value.occupied and value.cut_possible and self.check_shared_quay(key):
-                                self.possible_quay[key] = 1
+                                if value.ship != None:
+                                    self.possible_quay[key] = 1
                             elif not value.occupied and self.check_shared_quay(key):
                                 self.possible_quay[key] = 2
                 if len(self.possible_quay) == 0:
@@ -293,7 +294,7 @@ class Quay:
                 working_time = self.ship.current_work.working_time
             else:
                 # 자르기 가능(S, F)
-                if self.ship.current_work.progress == 0:
+                if self.ship.current_work.progress < self.ship.current_work.duration_fix:
                     if self.ship.current_work.duration_fix < self.ship.current_work.working_time:
                         # 처음 작업이 시작된 경우, 안벽에서의 작업 시간은 필수 기간에 해당하는 시간으로 설정됨
                         if self.ship.current_work.cut == "S":
