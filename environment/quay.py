@@ -7,7 +7,7 @@ from environment.simulation import *
 
 
 class QuayScheduling:
-    def __init__(self, df_quay, df_score, df_weight, df_ship, df_work, df_work_fixed, log_path):
+    def __init__(self, df_quay, df_score, df_weight, df_ship, df_work, df_work_fixed, log_path, duration=365, frame=5):
         self.df_quay = df_quay
         self.df_score = df_score
         self.df_weight = df_weight
@@ -15,8 +15,10 @@ class QuayScheduling:
         self.df_work = df_work
         self.df_work_fixed = df_work_fixed
         self.log_path = log_path
+        self.duration = duration
+        self.frame = frame
 
-        self.state_space = len(self.df_quay) * 3 + 3
+        self.state_space = len(self.df_weight["그룹"].unique()) * frame + len(self.df_quay) * 3 + 3
         self.action_space = len(self.df_quay) + 1
 
         self.total_score = 0.0
@@ -91,11 +93,18 @@ class QuayScheduling:
         return self._get_state()
 
     def _get_state(self):
+        f_0 = np.zeros((len(self.df_weight["그룹"].unique()), self.frame))  # 진수될 선박에 대한 정보
         f_1 = np.zeros(len(self.df_quay))  # 의사결정 시점에서 해당 작업의 각 안벽에 대한 선호도
         f_2 = np.zeros(len(self.df_quay))  # 안벽 이동 가능 여부 (0.0, 0.25, 0.5, 0.75, 1.0)
         f_3 = np.zeros(len(self.df_quay)) # 해당 안벽에 작업되고 있는 작업의 해당 안벽에서의 선호도
         f_4 = np.zeros(1) # 하루 누적 이동횟수
         f_5 = np.zeros(2) # 시뮬레이션 히스토리
+
+        for i, row in self.df_ship.iterrows():
+            if self.sim_env.now <= row["진수일"] < self.sim_env.now + self.duration:
+                row_idx = int(self.df_weight.loc[row["선종"], ["그룹"]])
+                col_idx = int((row["진수일"] - self.sim_env.now) * self.frame / self.duration)
+                f_0[row_idx, col_idx] += 1
 
         decision_work_name = self.model["Routing"].ship.current_work.name  # 해당 안벽에서 작업중인 작업이름
         decision_category = self.model["Routing"].ship.category
@@ -124,7 +133,7 @@ class QuayScheduling:
         f_5[0] = self.cnt_total / self.max_cnt_total
         f_5[1] = self.total_score / self.max_score
 
-        state = np.concatenate((f_1, f_2, f_3, f_4, f_5), axis=0)
+        state = np.concatenate((f_0.flatten(), f_1, f_2, f_3, f_4, f_5), axis=0)
         return state
 
     def _calculate_reward(self):
