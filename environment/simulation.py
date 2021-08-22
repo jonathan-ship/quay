@@ -311,15 +311,18 @@ class Quay:
 
             try:
                 # 앞서 결정된 작업 시간에 해당하는 시간 동안 작업 수행
+                self.monitor.record(self.env.now, "working start", self.name, self.ship.name, self.ship.current_work.name)
                 self.working_start = self.env.now
                 yield self.env.timeout(working_time)
             except simpy.Interrupt as i:
                 # 다른 안벽(ex. A 안벽)에서 작업 완료된 선박에 의해 현재 안벽(ex. B 안벽)의 작업에 대한 자르기가 이루어진 경우
                 # 현재 안벽(ex. B 안벽)에서 선박의 작업을 중단
+                self.monitor.record(self.env.now, "working interrupted", self.name, self.ship.name, self.ship.current_work.name)
                 self.ship.current_work.progress += (self.env.now - self.working_start)
                 self.back = i.cause
             else:
                 # 작업이 중간에 자르기 없이 완료된 경우
+                self.monitor.record(self.env.now, "working finish", self.name, self.ship.name, self.ship.current_work.name)
                 self.back = "0"
                 self.ship.current_work.progress += working_time
                 self.ship.current_work.done = True  # 작업의 완료
@@ -365,19 +368,24 @@ class Sea:
         if ship.wait:
             # 배치 안벽이 없어서 해상에 정박 중인 경우
             # 일마다 배치 가능 안벽 결정
+            self.monitor.record(self.env.now, "waiting start", self.name, ship.name, ship.current_work.name)
             working_time = 1
         else:
             # 해상 작업(EX. 시운전)을 수행해야 하는 경우, 작업 시간은 해당 해상 작업의 작업 기간으로 설정
+            self.monitor.record(self.env.now, "working start", self.name, ship.name, ship.current_work.name)
             working_time = ship.current_work.working_time
 
         # 앞서 결정된 작업 시간에 해당하는 시간 동안 작업 수행 또는 하루 동안 대기
         yield self.env.timeout(working_time)
         # 해상 작업이 완료된 경우
         if not ship.wait:
+            self.monitor.record(self.env.now, "working finish", self.name, ship.name, ship.current_work.name)
             ship.current_work.progress += working_time
             ship.current_work.done = True  # 작업의 완료
             ship.fix_idx += 1  # 다음 작업의 인덱스
             ship.current_work = ship.work_list[ship.fix_idx]  # 다음으로 수행할 작업을 현재 작업으로 변경
+        else:
+            self.monitor.record(self.env.now, "waiting finish", self.name, ship.name, ship.current_work.name)
 
         self.model["Routing"].queue.put(ship)
 
@@ -428,6 +436,7 @@ class Sink:
     def put(self, ship):
         self.ships_rec += 1
         self.last_delivery = self.env.now
+        self.monitor.record(self.env.now, "delivery", self.name, ship.name, None)
 
 
 class Monitor(object):
@@ -454,7 +463,7 @@ class Monitor(object):
         event_tracer['Quay'] = self.quay_name
         event_tracer['Ship'] = self.ship_name
         event_tracer['Work'] = self.work_name
-        event_tracer.to_csv(self.filepath)
+        event_tracer.to_csv(self.filepath, encoding='utf-8-sig')
 
         return event_tracer
 
@@ -480,7 +489,7 @@ if __name__ == "__main__":
         ships.append(ship)
 
     env = simpy.Environment()
-    filepath = '../result/log.csv'
+    filepath = '../result/log/'
     if not os.path.exists(filepath):
         os.makedirs(filepath)
     monitor = Monitor(filepath)

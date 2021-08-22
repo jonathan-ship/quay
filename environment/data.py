@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import plotly.express as px
 
 
 def import_train_data(info_path, scenario_path):
@@ -69,7 +70,7 @@ def import_train_data(info_path, scenario_path):
         lambda x: df_work_temp[(df_work_temp["선종"] == x["선종"])
                                & (df_work_temp["작업"] == x["작업명"])]["필수기간"].tolist()[0], axis=1)
 
-    return df_quay, df_score, df_weight, df_ship, df_work, df_work_fixed
+    return df_quay, df_score, df_weight, df_ship, df_work, df_work_fixed, start
 
 
 def import_test_data(info_path, scenario_path):
@@ -84,3 +85,28 @@ def import_test_data(info_path, scenario_path):
     df_work_fix = df_work_fix[df_work_fix["선종"] != "OTHERS"]
 
     return df_quay, df_work, df_score, df_ship, df_work_fix
+
+
+def export_result(file_path, start):
+    df_log = pd.read_csv(file_path)
+    df_log["Time"] = df_log["Time"].map(lambda x: start + pd.Timedelta(days=x))
+
+    df_gantt = pd.DataFrame(columns=["Task", "Start", "Finish", "Resource"])
+    df_log_group = df_log.groupby(["Ship"])
+
+    temp = 0
+    for ship_name, group in df_log_group:
+        group = group.sort_values(by=["Time"]).reset_index()
+        for i in range(len(group)):
+            if group.loc[i, "Quay"] == "Source":
+                continue
+            elif group.loc[i, "Quay"] == "Sink" or i == len(group) - 1:
+                break
+            else:
+                if group.loc[i, "Time"] != group.loc[i + 1, "Time"]:
+                    df_gantt.loc[temp] = [group.loc[i, "Quay"], group.loc[i, "Time"], group.loc[i + 1, "Time"], ship_name]
+                    temp += 1
+
+    fig = px.timeline(df_gantt, x_start="Start", x_end="Finish", y="Task", color="Resource")
+    fig.update_yaxes(autorange="reversed")
+    fig.show()

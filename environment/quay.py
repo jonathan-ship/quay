@@ -7,20 +7,21 @@ from environment.simulation import *
 
 
 class QuayScheduling:
-    def __init__(self, df_quay, df_score, df_weight, df_ship, df_work, df_work_fixed, log_path, duration=365, frame=5):
+    def __init__(self, df_quay, df_score, df_weight, df_ship, df_work, df_work_fixed, log_dir, duration=365, frame=5):
         self.df_quay = df_quay
         self.df_score = df_score
         self.df_weight = df_weight
         self.df_ship = df_ship
         self.df_work = df_work
         self.df_work_fixed = df_work_fixed
-        self.log_path = log_path
+        self.log_dir = log_dir
         self.duration = duration
         self.frame = frame
 
         self.state_space = len(self.df_weight["그룹"].unique()) * frame + len(self.df_quay) * 3 + 3
         self.action_space = len(self.df_quay) + 1
 
+        self.e = 0
         self.total_score = 0.0
         self.max_score = sum([max(df_score.loc[(row["선종"], row["작업명"])]) for i, row in self.df_work.iterrows()
                           if row["작업명"] != "시운전" and row["작업명"] != "G/T"])
@@ -65,6 +66,7 @@ class QuayScheduling:
             if self.model["Sink"].ships_rec == len(self.df_ship):
                 done = True
                 self.sim_env.run()
+                self.model["Sink"].monitor.save_event_tracer()
                 break
 
             self.sim_env.step()
@@ -75,10 +77,12 @@ class QuayScheduling:
         if self.cnt_day == self.move_constraint:
             reward = -100
             done = True
+            self.model["Sink"].monitor.save_event_tracer()
 
         return next_state, reward, done
 
     def reset(self):
+        self.e += 1
         self.sim_env, self.ships, self.model, self.monitor = self._modeling()
         self.done = False
         self.move = 0
@@ -163,7 +167,7 @@ class QuayScheduling:
 
     def _modeling(self):
         sim_env = simpy.Environment()  # 시뮬레이션 환경 생성
-        monitor = Monitor(self.log_path)  # 시뮬레이션 이벤트 로그 기록을 위한 Monitor 객체 생성
+        monitor = Monitor(self.log_dir + 'log_%d.csv' % self.e)  # 시뮬레이션 이벤트 로그 기록을 위한 Monitor 객체 생성
 
         # 안벽 배치 대상 선박에 대한 리스트 생성
         ships = []
@@ -207,13 +211,12 @@ if __name__ == "__main__":
     info_path = "./data/기준정보.xlsx"
     scenario_path = "./data/호선정보_학습.xlsx"
 
-    log_path = '../result/log.csv'
-    if not os.path.exists(log_path):
-        os.makedirs(log_path)
+    log_dir = '../result/log/'
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
 
-    df_quay, df_score, df_weight, df_ship, df_work, df_work_fix = import_train_data(info_path, scenario_path)
-
-    env = QuayScheduling(df_quay, df_score, df_weight, df_ship, df_work, df_work_fix, log_path)
+    df_quay, df_score, df_weight, df_ship, df_work, df_work_fix, start = import_train_data(info_path, scenario_path)
+    env = QuayScheduling(df_quay, df_score, df_weight, df_ship, df_work, df_work_fix, log_dir)
 
     done = False
     state = env.reset()
@@ -230,3 +233,5 @@ if __name__ == "__main__":
 
         print(reward)
         print(next_state)
+
+    export_result(log_dir + "log_%d.csv" % 1, start)
