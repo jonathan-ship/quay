@@ -299,6 +299,7 @@ class Quay:
                         # 처음 작업이 시작된 경우, 안벽에서의 작업 시간은 필수 기간에 해당하는 시간으로 설정됨
                         if self.ship.current_work.cut == "S":
                             working_time = self.ship.current_work.working_time - self.ship.current_work.duration_fix
+                            self.cut_possible = True
                         else:
                             working_time = self.ship.current_work.duration_fix
                     else:
@@ -307,7 +308,8 @@ class Quay:
                     # 이미 작업이 수행되었으나 자르기 후 다시 시작하는 경우, 안벽에서의 작업 시간은 남은 작업 시간으로 설정됨
                     # 즉, 필수 기간이 끝난 시점에만 안벽 이동 여부를 결정하고 그 이후에는 종료시까지 특정 안벽에서 계속 작업 수행
                     working_time = self.ship.current_work.working_time - self.ship.current_work.progress
-                    self.cut_possible = True
+                    if self.ship.current_work.cut == "F":
+                        self.cut_possible = True
 
             try:
                 # 앞서 결정된 작업 시간에 해당하는 시간 동안 작업 수행
@@ -325,10 +327,11 @@ class Quay:
                 self.monitor.record(self.env.now, "working finish", self.name, self.ship.name, self.ship.current_work.name)
                 self.back = "0"
                 self.ship.current_work.progress += working_time
-                self.ship.current_work.done = True  # 작업의 완료
-                self.ship.fix_idx += 1  # 다음 작업의 인덱스
-                if self.ship.fix_idx < len(self.ship.work_list):
-                    self.ship.current_work = self.ship.work_list[self.ship.fix_idx]  # 다음으로 수행할 작업을 현재 작업으로 변경
+                if self.ship.current_work.progress >= self.ship.current_work.working_time:
+                    self.ship.current_work.done = True  # 작업의 완료
+                    self.ship.fix_idx += 1  # 다음 작업의 인덱스
+                    if self.ship.fix_idx < len(self.ship.work_list):
+                        self.ship.current_work = self.ship.work_list[self.ship.fix_idx]  # 다음으로 수행할 작업을 현재 작업으로 변경
 
             if not self.ship.interrupted:
                 self.occupied = False
