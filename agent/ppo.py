@@ -160,12 +160,11 @@ class PPOAgent():
 
                 self.train_model()
 
-            if e % 10 == 0:
-                print('epside:%d/%d, total reward:%1.3f, average loss:%1.3f, total move:%1.3f, total score:%1.3f' % (
-                    e, num_of_episodes, total_reward, self.avg_loss / (self.K_epoch * step), total_move, total_score))
-                self.record(e, total_reward, self.avg_loss / (self.K_epoch * step), total_move, total_score)
+            print('epside:%d/%d, total reward:%1.3f, average loss:%1.3f, total move:%1.3f, total score:%1.3f' %
+                  (e, num_of_episodes, total_reward, self.avg_loss / (self.K_epoch * step), total_move, total_score))
+            self.record(e, total_reward, self.avg_loss / (self.K_epoch * step), total_move, total_score)
 
-            if e % 1000 == 0:
+            if e % 100 == 0:
                 torch.save({'episode': e,
                             'model_state_dict': self.model.state_dict(),
                             'optimizer_state_dict': self.optimizer.state_dict()},

@@ -74,10 +74,10 @@ class QuayScheduling:
         reward = self._calculate_reward()
         next_state = self._get_state()
 
-        if self.cnt_day == self.move_constraint:
-            reward = -100
-            done = True
-            self.model["Sink"].monitor.save_event_tracer()
+        # if self.cnt_day == self.move_constraint:
+        #     reward = -100
+        #     done = True
+        #     self.model["Sink"].monitor.save_event_tracer()
 
         return next_state, reward, done
 
@@ -150,14 +150,14 @@ class QuayScheduling:
         # 호선이동 횟수 역수할지 - 둘지 고민
         reward_move = 0
         if loss:
-            reward_move = -7
+            reward_move = 3 / 7
         else:
-            if previous_quay != current_quay:
-                reward_move = - self.df_weight["가중치"][ship_category]
+            if previous_quay != current_quay and previous_quay != "Source":
+                reward_move = 3 / self.df_weight["가중치"][ship_category]
         # 전문 안벽 배치율
         reward_eff = 0
         if current_quay != "S":
-            reward_eff = self.model[current_quay].scores[ship_category, work_category]
+            reward_eff = self.model[current_quay].scores[ship_category, work_category] / 1.5
 
         self.reward_move = reward_move
         self.reward_efficiency = reward_eff

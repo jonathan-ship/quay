@@ -63,9 +63,13 @@ class Routing:
     def run(self):
         while True:
             self.ship = yield self.queue.get()
-            self.current_quay = self.ship.main_quay
+            if self.ship.main_quay != None:
+                self.current_quay = self.ship.main_quay
+            else:
+                self.current_quay = "Source"
 
             if self.ship.fix_idx == len(self.ship.work_list):
+                self.update_possible_quay()
                 self.model["Sink"].put(self.ship)
             else:
                 self.indicator = True
@@ -118,7 +122,7 @@ class Routing:
                     else:
                         if self.model[key].scores[self.ship.category, self.ship.current_work.name] != 0.0:
                             if value.occupied and value.cut_possible and self.check_shared_quay(key):
-                                if value.ship != None:
+                                if value.back != "1":
                                     self.possible_quay[key] = 1
                             elif not value.occupied and self.check_shared_quay(key):
                                 self.possible_quay[key] = 2
@@ -292,24 +296,28 @@ class Quay:
                 # 자르기 불가(N)
                 # 안벽에서의 작업 시간은 해당 작업의 전체 작업으로 설정됨
                 working_time = self.ship.current_work.working_time
-            else:
-                # 자르기 가능(S, F)
-                if self.ship.current_work.progress < self.ship.current_work.duration_fix:
-                    if self.ship.current_work.duration_fix < self.ship.current_work.working_time:
-                        # 처음 작업이 시작된 경우, 안벽에서의 작업 시간은 필수 기간에 해당하는 시간으로 설정됨
-                        if self.ship.current_work.cut == "S":
-                            working_time = self.ship.current_work.working_time - self.ship.current_work.duration_fix
-                            self.cut_possible = True
-                        else:
-                            working_time = self.ship.current_work.duration_fix
-                    else:
-                        working_time = self.ship.current_work.working_time
+            if self.ship.current_work.cut == "S":
+                if self.ship.current_work.duration_fix >= self.ship.current_work.working_time:
+                    working_time = self.ship.current_work.working_time
                 else:
-                    # 이미 작업이 수행되었으나 자르기 후 다시 시작하는 경우, 안벽에서의 작업 시간은 남은 작업 시간으로 설정됨
-                    # 즉, 필수 기간이 끝난 시점에만 안벽 이동 여부를 결정하고 그 이후에는 종료시까지 특정 안벽에서 계속 작업 수행
-                    working_time = self.ship.current_work.working_time - self.ship.current_work.progress
-                    if self.ship.current_work.cut == "F":
+                    if self.ship.current_work.progress < self.ship.current_work.working_time - self.ship.current_work.duration_fix:
+                        working_time = self.ship.current_work.working_time - self.ship.current_work.duration_fix - self.ship.current_work.progress
                         self.cut_possible = True
+                    else:
+                        working_time = self.ship.current_work.working_time - self.ship.current_work.progress
+            elif self.ship.current_work.cut == "F":
+                if self.ship.current_work.duration_fix >= self.ship.current_work.working_time:
+                    working_time = self.ship.current_work.working_time
+                else:
+                    if self.ship.current_work.progress >= self.ship.current_work.duration_fix:
+                        working_time = self.ship.current_work.working_time - self.ship.current_work.progress
+                        self.cut_possible = True
+                    else:
+                        working_time = self.ship.current_work.working_time - self.ship.current_work.duration_fix
+            else:
+                # 자르기 불가(N)
+                # 안벽에서의 작업 시간은 해당 작업의 전체 작업으로 설정됨
+                working_time = self.ship.current_work.working_time
 
             try:
                 # 앞서 결정된 작업 시간에 해당하는 시간 동안 작업 수행
