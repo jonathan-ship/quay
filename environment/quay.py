@@ -18,8 +18,8 @@ class QuayScheduling:
         self.duration = duration
         self.frame = frame
 
-        self.state_space = len(self.df_weight["그룹"].unique()) * frame + len(self.df_quay) * 3 + 3
-        self.action_space = len(self.df_quay) + 1
+        self.state_size = len(self.df_weight["그룹"].unique()) * frame + len(self.df_quay) * 3 + 3
+        self.action_size = len(self.df_quay) + 1
 
         self.e = 0
         self.total_score = 0.0
@@ -33,7 +33,7 @@ class QuayScheduling:
         self.w_move = 0.5
         self.w_efficiency = 0.5
         self.reward_move = 0.0
-        self.reward_efficiency =0.0
+        self.reward_efficiency = 0.0
         self.mapping = {i: row["안벽"] for i, row in self.df_quay.iterrows()}
         self.mapping[len(self.df_quay)] = "S"
         self.inverse_mapping = {y: x for x, y in self.mapping.items()}

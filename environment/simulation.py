@@ -422,7 +422,6 @@ class Source:
 
             # 모든 선박이 진수된 경우 시뮬레이션 종료
             if self.sent == len(self.ships):
-                print("All ships are sent.")
                 break
 
 
