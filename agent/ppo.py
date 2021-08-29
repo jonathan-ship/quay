@@ -55,11 +55,11 @@ class PPOAgent():
 
         self.avg_loss = 0.0
 
-        self.learning_rate = 1e-4
+        self.learning_rate = 1e-5
         self.epsilon = 0.2
-        self.gamma = 0.98
+        self.gamma = 0.75
         self.lmbda = 0.95
-        self.K_epoch = 3
+        self.K_epoch = 2
         self.T = 20
 
         self.start_episode = 0
@@ -77,8 +77,8 @@ class PPOAgent():
         with open(self.log_path, 'a') as f:
             f.write('%d,%1.4f,%1.4f,%d,%d\n' % (episode, reward_sum, avg_loss, move, score))
 
-    def append_sample(self, state, action, reward, next_state, prob, done):
-        self.data.append((state, action, reward, next_state, prob, done))
+    def append_sample(self, state, action, reward, next_state, prob, mask, done):
+        self.data.append((state, action, reward, next_state, prob, mask, done))
 
     def get_action(self, state):
         mask = torch.ones(self.env.action_size)
@@ -92,7 +92,7 @@ class PPOAgent():
         m = Categorical(prob)
         action = m.sample().item()
 
-        return action, prob
+        return action, mask, prob
 
     def copmute_loss(self):
         states = torch.tensor([sample[0] for sample in self.data], dtype=torch.float32)
@@ -100,7 +100,8 @@ class PPOAgent():
         rewards = torch.tensor([[sample[2]] for sample in self.data], dtype=torch.float32)
         next_states = torch.tensor([sample[3] for sample in self.data], dtype=torch.float32)
         probs = torch.tensor([[sample[4]] for sample in self.data], dtype=torch.float32)
-        dones = torch.tensor([[1 - sample[5]] for sample in self.data], dtype=torch.float32)
+        masks = torch.tensor([sample[5] for sample in self.data], dtype=torch.float32)
+        dones = torch.tensor([[1 - sample[6]] for sample in self.data], dtype=torch.float32)
 
         td_target = rewards + self.gamma * self.model.v(next_states) * dones
         delta = td_target - self.model.v(states)
@@ -112,7 +113,8 @@ class PPOAgent():
             advantage_lst[t] = advantage
 
         logits = self.model.pi(states)
-        pi = torch.softmax(logits, dim=1)
+        logits_maksed = logits - 1e8 * masks
+        pi = torch.softmax(logits_maksed, dim=1)
         pi_a = pi.gather(1, actions)
         ratio = torch.exp(torch.log(pi_a) - torch.log(probs))  # a/b == exp(log(a)-log(b))
 
@@ -145,10 +147,10 @@ class PPOAgent():
                 for t in range(self.T):
                     step += 1
 
-                    action, prob = self.get_action(state)
+                    action, mask, prob = self.get_action(state)
                     next_state, reward, done = self.env.step(action)
 
-                    self.append_sample(state, action, reward, next_state, prob[action], done)
+                    self.append_sample(state, action, reward, next_state, prob[action], mask.numpy(), done)
 
                     state = next_state
                     total_reward += reward

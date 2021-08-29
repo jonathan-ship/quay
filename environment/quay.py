@@ -30,8 +30,8 @@ class QuayScheduling:
         self.max_cnt_total = sum([df_weight["가중치"][row["선종"]] for i, row in self.df_work.iterrows()])
         self.move_constraint = 5
         self.time = 0.0
-        self.w_move = 0.5
-        self.w_efficiency = 0.5
+        self.w_move = 1.0
+        self.w_efficiency = 0.0
         self.reward_move = 0.0
         self.reward_efficiency = 0.0
         self.mapping = {i: row["안벽"] for i, row in self.df_quay.iterrows()}
