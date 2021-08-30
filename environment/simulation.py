@@ -125,6 +125,8 @@ class Routing:
                                 if value.back != "1":
                                     self.possible_quay[key] = 1
                             elif not value.occupied and self.check_shared_quay(key):
+                                if len(value.queue.items) > 0:
+                                    print("ddd")
                                 self.possible_quay[key] = 2
                 if len(self.possible_quay) == 0:
                     self.possible_quay["S"] = 3
@@ -208,8 +210,16 @@ class Routing:
             ship.current_quay.append("S")
         else:
             self.model[next_quay].occupied = True
-            if ship.current_work.cut != "N" and self.ship.current_work.progress >= self.ship.current_work.duration_fix:
-                self.model[next_quay].cut_possible = True
+            if self.ship.current_work.cut == "S":
+                if self.ship.current_work.progress < self.ship.current_work.working_time - self.ship.current_work.duration_fix:
+                    self.model[next_quay].cut_possible = True
+                else:
+                    self.model[next_quay].cut_possible = False
+            elif self.ship.current_work.cut == "F":
+                if self.ship.current_work.progress >= self.ship.current_work.duration_fix:
+                    self.model[next_quay].cut_possible = True
+                else:
+                    self.model[next_quay].cut_possible = False
             else:
                 self.model[next_quay].cut_possible = False
 
@@ -292,17 +302,12 @@ class Quay:
         while True:
             self.ship = yield self.queue.get()  # 현재 안벽에서 작업을 수행할 선박
 
-            if self.ship.current_work.cut == "N":
-                # 자르기 불가(N)
-                # 안벽에서의 작업 시간은 해당 작업의 전체 작업으로 설정됨
-                working_time = self.ship.current_work.working_time
             if self.ship.current_work.cut == "S":
                 if self.ship.current_work.duration_fix >= self.ship.current_work.working_time:
                     working_time = self.ship.current_work.working_time
                 else:
                     if self.ship.current_work.progress < self.ship.current_work.working_time - self.ship.current_work.duration_fix:
                         working_time = self.ship.current_work.working_time - self.ship.current_work.duration_fix - self.ship.current_work.progress
-                        self.cut_possible = True
                     else:
                         working_time = self.ship.current_work.working_time - self.ship.current_work.progress
             elif self.ship.current_work.cut == "F":
@@ -311,7 +316,6 @@ class Quay:
                 else:
                     if self.ship.current_work.progress >= self.ship.current_work.duration_fix:
                         working_time = self.ship.current_work.working_time - self.ship.current_work.progress
-                        self.cut_possible = True
                     else:
                         working_time = self.ship.current_work.working_time - self.ship.current_work.duration_fix
             else:
@@ -341,6 +345,11 @@ class Quay:
                     if self.ship.fix_idx < len(self.ship.work_list):
                         self.ship.current_work = self.ship.work_list[self.ship.fix_idx]  # 다음으로 수행할 작업을 현재 작업으로 변경
 
+                if self.ship.interrupted and int(self.back) == 1:
+                    self.ship.reserved = self.name
+
+            # 현재 안벽에 배치된 선박을 이동
+            self.model["Routing"].queue.put(self.ship)
             if not self.ship.interrupted:
                 self.occupied = False
                 self.cut_possible = False
@@ -350,12 +359,6 @@ class Quay:
                     else:
                         idx = self.model[i].shared_quay_set.index(self.name)
                         self.model[i].length_occupied[idx] = 0
-            else:
-                if int(self.back) == 1:
-                    self.ship.reserved = self.name
-
-            # 현재 안벽에 배치된 선박을 이동
-            self.model["Routing"].queue.put(self.ship)
             self.ship = None
 
 

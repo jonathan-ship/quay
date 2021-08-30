@@ -47,6 +47,8 @@ class QuayScheduling:
         work_category = self.model["Routing"].ship.current_work.name
         self.model["Routing"].decision.succeed(quay_name)
         self.model["Routing"].indicator = False
+        # if self.model["Routing"].ship.name == "PROJ_44":
+        #     print(self.sim_env.now, self.mapping[action], self.model["Routing"].ship.current_work.name)
 
         if self.model["Routing"].current_quay != quay_name:
             self.cnt_total += self.df_weight["가중치"][ship_category]
