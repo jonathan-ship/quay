@@ -45,6 +45,8 @@ class QuayScheduling:
         quay_name = self.mapping[action]
         ship_category = self.model["Routing"].ship.category
         work_category = self.model["Routing"].ship.current_work.name
+        if self.model["Routing"].decision == None:
+            print("f")
         self.model["Routing"].decision.succeed(quay_name)
         self.model["Routing"].indicator = False
         # if self.model["Routing"].ship.name == "PROJ_44":

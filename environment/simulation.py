@@ -112,6 +112,7 @@ class Routing:
         if self.ship.reserved != None:
             self.possible_quay[self.ship.reserved] = 3
             self.ship.reserved = None
+            #self.model[self.ship.reserved].back = "0"
         else:
             if self.ship.current_work.name == "시운전" or self.ship.current_work.name == "G/T":
                 self.possible_quay["S"] = 2
@@ -125,8 +126,6 @@ class Routing:
                                 if value.back != "1":
                                     self.possible_quay[key] = 1
                             elif not value.occupied and self.check_shared_quay(key):
-                                if len(value.queue.items) > 0:
-                                    print("ddd")
                                 self.possible_quay[key] = 2
                 if len(self.possible_quay) == 0:
                     self.possible_quay["S"] = 3
@@ -345,11 +344,6 @@ class Quay:
                     if self.ship.fix_idx < len(self.ship.work_list):
                         self.ship.current_work = self.ship.work_list[self.ship.fix_idx]  # 다음으로 수행할 작업을 현재 작업으로 변경
 
-                if self.ship.interrupted and int(self.back) == 1:
-                    self.ship.reserved = self.name
-
-            # 현재 안벽에 배치된 선박을 이동
-            self.model["Routing"].queue.put(self.ship)
             if not self.ship.interrupted:
                 self.occupied = False
                 self.cut_possible = False
@@ -359,6 +353,12 @@ class Quay:
                     else:
                         idx = self.model[i].shared_quay_set.index(self.name)
                         self.model[i].length_occupied[idx] = 0
+            else:
+                if int(self.back) == 1:
+                    self.ship.reserved = self.name
+
+            # 현재 안벽에 배치된 선박을 이동
+            self.model["Routing"].queue.put(self.ship)
             self.ship = None
 
 
