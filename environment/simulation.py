@@ -48,6 +48,7 @@ class Routing:
         self.model = model
         self.monitor = monitor
 
+        self.time = 0.0
         self.ship = None
         self.indicator = False
         self.decision = None
@@ -55,6 +56,7 @@ class Routing:
         self.move = {}
         self.quay = []
         self.current_quay = None
+        self.selected_quay = []
         self.possible_quay = {}
         self.queue = simpy.Store(env)
 
@@ -63,6 +65,10 @@ class Routing:
     def run(self):
         while True:
             self.ship = yield self.queue.get()
+            if self.time != self.env.now:
+                self.selected_quay = []
+                self.time = self.env.now
+
             if self.ship.main_quay != None:
                 self.current_quay = self.ship.main_quay
             else:
@@ -78,6 +84,8 @@ class Routing:
                 self.decision = self.env.event()
                 next_quay = yield self.decision
                 self.decision = None
+
+                self.selected_quay.append(next_quay)
 
                 if next_quay == "S":
                     if self.ship.current_work.name == "시운전" or self.ship.current_work.name == "G/T":
@@ -118,7 +126,7 @@ class Routing:
                 self.possible_quay["S"] = 2
             else:
                 for key, value in self.model.items():
-                    if key in ["Source", "Sink", "Routing", "S"]:
+                    if key in ["Source", "Sink", "Routing", "S"] or key in self.selected_quay:
                         continue
                     else:
                         if self.model[key].scores[self.ship.category, self.ship.current_work.name] != 0.0:
