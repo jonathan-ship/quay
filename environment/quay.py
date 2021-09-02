@@ -154,10 +154,13 @@ class QuayScheduling:
         # 호선이동 횟수 역수할지 - 둘지 고민
         reward_move = 0
         if loss:
-            reward_move = 3 / 7
+            reward_move = 1 / 7
         else:
-            if previous_quay != current_quay and previous_quay != "Source":
-                reward_move = 3 / self.df_weight["가중치"][ship_category]
+            if previous_quay != current_quay:
+                if previous_quay != "Source":
+                    reward_move = 1 / self.df_weight["가중치"][ship_category]
+            else:
+                reward_move = 1
         # 전문 안벽 배치율
         reward_eff = 0
         if current_quay != "S":
