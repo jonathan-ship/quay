@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import matplotlib.pyplot as plt
 
 
 def import_train_data(info_path, scenario_path):
@@ -110,3 +111,31 @@ def export_result(file_path, start):
     fig = px.timeline(df_gantt, x_start="Start", x_end="Finish", y="Task", color="Resource")
     fig.update_yaxes(autorange="reversed")
     fig.show()
+
+
+def show_moves_per_day(file_path):
+    df_log = pd.read_csv(file_path)
+    moves_per_day = [0 for _ in range(int(df_log["Time"].min()), int(df_log["Time"].max()) + 1)]
+
+    df_log_group = df_log.groupby(["Ship"])
+
+    for ship_name, group in df_log_group:
+        group = group.sort_values(by=["Time"]).reset_index()
+        for i in range(len(group) - 1):
+            if group.loc[i, "Quay"] != group.loc[i + 1, "Quay"]:
+                day = int(group.loc[i, "Time"])
+                moves_per_day[day] += 1
+
+    time = [i for i in range(len(moves_per_day))]
+    fig, ax = plt.subplots()
+    ax.plot(time, moves_per_day)
+    ax.set_xlabel("day")
+    ax.set_ylabel("moves")
+    fig.show()
+
+
+
+if __name__ == "__main__":
+    event_path = '../result/event/log_1.csv'
+    show_moves_per_day(event_path)
+
