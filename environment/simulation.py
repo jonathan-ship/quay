@@ -324,7 +324,7 @@ class Quay:
                     if self.ship.current_work.progress >= self.ship.current_work.duration_fix:
                         working_time = self.ship.current_work.working_time - self.ship.current_work.progress
                     else:
-                        working_time = self.ship.current_work.working_time - self.ship.current_work.duration_fix
+                        working_time = self.ship.current_work.duration_fix - self.ship.current_work.progress
             else:
                 # 자르기 불가(N)
                 # 안벽에서의 작업 시간은 해당 작업의 전체 작업으로 설정됨
