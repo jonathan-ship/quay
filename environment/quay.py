@@ -18,7 +18,8 @@ class QuayScheduling:
         self.duration = duration
         self.frame = frame
 
-        self.state_size = len(self.df_weight["그룹"].unique()) * frame + len(self.df_quay) * 3 + 3
+        # self.state_size = len(self.df_weight["그룹"].unique()) * frame + len(self.df_quay) * 3 + 3
+        self.state_size = len(self.df_weight["그룹"].unique()) * frame + len(self.df_quay) + 1
         self.action_size = len(self.df_quay) + 1
 
         self.e = 0
@@ -30,8 +31,8 @@ class QuayScheduling:
         self.max_cnt_total = sum([df_weight["가중치"][row["선종"]] for i, row in self.df_work.iterrows()])
         self.move_constraint = 5
         self.time = 0.0
-        self.w_move = 0.5
-        self.w_efficiency = 0.5
+        self.w_move = 1.0
+        self.w_efficiency = 0.0
         self.reward_move = 0.0
         self.reward_efficiency = 0.0
         self.mapping = {i: row["안벽"] for i, row in self.df_quay.iterrows()}
@@ -102,11 +103,11 @@ class QuayScheduling:
 
     def _get_state(self):
         f_0 = np.zeros((len(self.df_weight["그룹"].unique()), self.frame))  # 진수될 선박에 대한 정보
-        f_1 = np.zeros(len(self.df_quay))  # 의사결정 시점에서 해당 작업의 각 안벽에 대한 선호도
+        #f_1 = np.zeros(len(self.df_quay))  # 의사결정 시점에서 해당 작업의 각 안벽에 대한 선호도
         f_2 = np.zeros(len(self.df_quay))  # 안벽 이동 가능 여부 (0.0, 0.25, 0.5, 0.75, 1.0)
-        f_3 = np.zeros(len(self.df_quay)) # 해당 안벽에 작업되고 있는 작업의 해당 안벽에서의 선호도
+        #f_3 = np.zeros(len(self.df_quay)) # 해당 안벽에 작업되고 있는 작업의 해당 안벽에서의 선호도
         f_4 = np.zeros(1) # 하루 누적 이동횟수
-        f_5 = np.zeros(2) # 시뮬레이션 히스토리
+        #f_5 = np.zeros(2) # 시뮬레이션 히스토리
 
         for i, row in self.df_ship.iterrows():
             if self.sim_env.now <= row["진수일"] < self.sim_env.now + self.duration:
@@ -119,7 +120,7 @@ class QuayScheduling:
 
         for idx, quay_name in self.mapping.items():
             if quay_name not in ["Routing", "Source", "Sink", "S"]:
-                f_1[idx] = self.model[quay_name].scores[decision_category, decision_work_name]
+                #f_1[idx] = self.model[quay_name].scores[decision_category, decision_work_name]
 
                 if self.model["Routing"].possible_quay.get(quay_name):
                     if self.model["Routing"].possible_quay[quay_name] == 1:
@@ -132,16 +133,17 @@ class QuayScheduling:
                     elif self.model["Routing"].possible_quay[quay_name] == 2:
                         f_2[idx] = 1
 
-                if self.model[quay_name].occupied and int(self.model[quay_name].back) == 0:
-                    category = self.model[quay_name].ship.category  # 해당 안벽에서 작업중인 선박의 선종
-                    work_name = self.model[quay_name].ship.current_work.name  # 해당 안벽에서 작업중인 작업이름
-                    f_3[idx] = self.model[quay_name].scores[category, work_name]
+                # if self.model[quay_name].occupied and int(self.model[quay_name].back) == 0:
+                #     category = self.model[quay_name].ship.category  # 해당 안벽에서 작업중인 선박의 선종
+                #     work_name = self.model[quay_name].ship.current_work.name  # 해당 안벽에서 작업중인 작업이름
+                #     f_3[idx] = self.model[quay_name].scores[category, work_name]
 
         f_4[0] = self.cnt_day / self.move_constraint
-        f_5[0] = self.cnt_total / self.max_cnt_total
-        f_5[1] = self.total_score / self.max_score
+        # f_5[0] = self.cnt_total / self.max_cnt_total
+        # f_5[1] = self.total_score / self.max_score
 
-        state = np.concatenate((f_0.flatten(), f_1, f_2, f_3, f_4, f_5), axis=0)
+        # state = np.concatenate((f_0.flatten(), f_1, f_2, f_3, f_4, f_5), axis=0)
+        state = np.concatenate((f_0.flatten(), f_2, f_4), axis=0)
         return state
 
     def _calculate_reward(self):
@@ -154,13 +156,13 @@ class QuayScheduling:
         # 호선이동 횟수 역수할지 - 둘지 고민
         reward_move = 0
         if loss:
-            reward_move = 1 / 7
+            reward_move = - 7 / 7
         else:
             if previous_quay != current_quay:
                 if previous_quay != "Source":
-                    reward_move = 1 / self.df_weight["가중치"][ship_category]
+                    reward_move = - self.df_weight["가중치"][ship_category] / 7
             else:
-                reward_move = 1
+                reward_move = 0
         # 전문 안벽 배치율
         reward_eff = 0
         if current_quay != "S":
@@ -190,7 +192,7 @@ class QuayScheduling:
                 fix_idx = 0
 
             # Ship 클래스에 대한 객체 생성 후 선박 리스트에 추가
-            ship = Ship(row["호선번호"], row["선종"], row["길이"], row["진수일"], row["인도일"], works, fix_idx=fix_idx)
+            ship = Ship(row["호선번호"], row["선종"], row["진수일"], row["인도일"], works, fix_idx=fix_idx)
             ships.append(ship)
 
         # 시뮬레이션 프로세스 모델링
@@ -198,11 +200,11 @@ class QuayScheduling:
         model["Source"] = Source(sim_env, ships, model, monitor)  # Source
         for i, row in self.df_quay.iterrows():
             scores = self.df_score[row["안벽"]]
-            shared_quay_set = []
-            for j in range(1, 4):
-                if row["공유{0}".format(j)]:
-                    shared_quay_set.append(row["공유{0}".format(j)])
-            quay = Quay(sim_env, row["안벽"], model, row["길이"], shared_quay_set, scores, monitor)
+            # shared_quay_set = []
+            # for j in range(1, 4):
+            #     if row["공유{0}".format(j)]:
+            #         shared_quay_set.append(row["공유{0}".format(j)])
+            quay = Quay(sim_env, row["안벽"], model, scores, monitor)
             model[row["안벽"]] = quay  # Quay
         model["S"] = Sea(sim_env, model, monitor)  # Sea
         model["Routing"] = Routing(sim_env, model, monitor)  # Routing
@@ -216,7 +218,7 @@ if __name__ == "__main__":
     from data import *
 
     info_path = "./data/기준정보.xlsx"
-    scenario_path = "./data/호선정보_학습.xlsx"
+    scenario_path = "./data/호선정보_테스트.xlsx"
 
     log_dir = '../result/log/'
     if not os.path.exists(log_dir):

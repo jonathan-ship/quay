@@ -19,10 +19,9 @@ class Work:
 
 
 class Ship:
-    def __init__(self, name, category, length, launching_date, delivery_date, work_table, fix_idx=0):
+    def __init__(self, name, category, launching_date, delivery_date, work_table, fix_idx=0):
         self.name = name  # 호선 번호
         self.category = category  # 선종
-        self.length = length  # 선박의 길이
         self.launching_date = launching_date  # 선박의 진수일 (L/C)
         self.delivery_date = delivery_date  # 선박의 인도일 (D/L)
         self.work_table = work_table  # 선박에 대한 안벽 작업 리스트 (데이터 프레임 형태)
@@ -37,8 +36,9 @@ class Ship:
         self.wait = False
         self.reserved = None
         self.interrupted = False
-        self.main_quay = None
-        self.current_quay = []
+        self.current_quay = None
+        #self.main_quay = None
+        #self.current_quay = []
 
 
 class Routing:
@@ -56,6 +56,7 @@ class Routing:
         self.move = {}
         self.quay = []
         self.current_quay = None
+        self.next_quay = None
         self.selected_quay = []
         self.possible_quay = {}
         self.queue = simpy.Store(env)
@@ -69,8 +70,8 @@ class Routing:
                 self.selected_quay = []
                 self.time = self.env.now
 
-            if self.ship.main_quay != None:
-                self.current_quay = self.ship.main_quay
+            if self.ship.current_quay != None:
+                self.current_quay = self.ship.current_quay
             else:
                 self.current_quay = "Source"
 
@@ -82,12 +83,11 @@ class Routing:
                 self.update_possible_quay()
 
                 self.decision = self.env.event()
-                next_quay = yield self.decision
+                self.next_quay = yield self.decision
+                self.selected_quay.append(self.next_quay)
                 self.decision = None
 
-                self.selected_quay.append(next_quay)
-
-                if next_quay == "S":
+                if self.next_quay == "S":
                     if self.ship.current_work.name == "시운전" or self.ship.current_work.name == "G/T":
                         self.ship.wait = False
                     else:
@@ -96,23 +96,25 @@ class Routing:
                 else:
                     self.ship.wait = False
 
-                if self.current_quay != next_quay:
-                    if next_quay != "S" and self.model[next_quay].occupied:
-                        self.remove(next_quay)
-                        self.model[next_quay].ship.interrupted = True
-                        self.model[next_quay].action.interrupt("0")
+                if self.current_quay != self.next_quay:
+                    if self.next_quay != "S" and self.model[self.next_quay].occupied:
+                        self.remove(self.next_quay)
+                        self.model[self.next_quay].ship.interrupted = True
+                        self.model[self.next_quay].action.interrupt("0")
                     self.check_narrow_quay(self.current_quay)
-                    self.check_narrow_quay(next_quay)
+                    self.check_narrow_quay(self.next_quay)
                 else:
                     if self.ship.interrupted:
                         self.loss = True
                 self.move = {"ship_category": self.ship.category, "work_category": self.ship.current_work.name,
-                             "previous": self.current_quay, "current": next_quay, "loss": self.loss}
+                             "previous": self.current_quay, "current": self.next_quay, "loss": self.loss}
 
                 self.ship.interrupted = False
-                self.put(self.ship, next_quay)
-                yield self.model[next_quay].queue.put(self.ship)
+                self.put()
+                yield self.model[self.next_quay].queue.put(self.ship)
                 self.ship = None
+                self.current_quay = None
+                self.next_quay = None
                 self.loss = False
 
     def update_possible_quay(self):
@@ -130,45 +132,45 @@ class Routing:
                         continue
                     else:
                         if self.model[key].scores[self.ship.category, self.ship.current_work.name] != 0.0:
-                            if value.occupied and value.cut_possible and self.check_shared_quay(key):
+                            if value.occupied and value.cut_possible:
                                 if value.back != "1":
                                     self.possible_quay[key] = 1
-                            elif not value.occupied and self.check_shared_quay(key):
+                            elif not value.occupied:
                                 self.possible_quay[key] = 2
                 if len(self.possible_quay) == 0:
                     self.possible_quay["S"] = 3
 
-    def check_shared_quay(self, name):
-        res = False
-        total_ship_length = self.ship.length
-        total_quay_length = 0
-        if len(self.model[name].shared_quay_set) == 1:
-            total_quay_length += self.model[name].length
-        elif len(self.model[name].shared_quay_set) == 2:
-            for shared in self.model[name].shared_quay_set:
-                if self.model[shared].name == name or not self.model[shared].cut_possible:
-                    total_ship_length += sum(self.model[shared].length_occupied)
-                total_quay_length += self.model[shared].length
-        else:
-            if self.model[name].position == 0:
-                for shared in self.model[name].shared_quay_set[:2]:
-                    if self.model[shared].name == name or not self.model[shared].cut_possible:
-                        total_ship_length += sum(self.model[shared].length_occupied)
-                    total_quay_length += self.model[shared].length
-            elif self.model[name].position == 1:
-                for shared in self.model[name].shared_quay_set:
-                    if self.model[shared].name == name or not self.model[shared].cut_possible:
-                        total_ship_length += sum(self.model[shared].length_occupied)
-                    total_quay_length += self.model[shared].length
-            else:
-                for shared in self.model[name].shared_quay_set[1:]:
-                    if self.model[shared].name == name or not self.model[shared].cut_possible:
-                        total_ship_length += sum(self.model[shared].length_occupied)
-                    total_quay_length += self.model[shared].length
-        if total_ship_length <= total_quay_length:
-            res = True
-
-        return res
+    # def check_shared_quay(self, name):
+    #     res = False
+    #     total_ship_length = self.ship.length
+    #     total_quay_length = 0
+    #     if len(self.model[name].shared_quay_set) == 1:
+    #         total_quay_length += self.model[name].length
+    #     elif len(self.model[name].shared_quay_set) == 2:
+    #         for shared in self.model[name].shared_quay_set:
+    #             if self.model[shared].name == name or not self.model[shared].cut_possible:
+    #                 total_ship_length += sum(self.model[shared].length_occupied)
+    #             total_quay_length += self.model[shared].length
+    #     else:
+    #         if self.model[name].position == 0:
+    #             for shared in self.model[name].shared_quay_set[:2]:
+    #                 if self.model[shared].name == name or not self.model[shared].cut_possible:
+    #                     total_ship_length += sum(self.model[shared].length_occupied)
+    #                 total_quay_length += self.model[shared].length
+    #         elif self.model[name].position == 1:
+    #             for shared in self.model[name].shared_quay_set:
+    #                 if self.model[shared].name == name or not self.model[shared].cut_possible:
+    #                     total_ship_length += sum(self.model[shared].length_occupied)
+    #                 total_quay_length += self.model[shared].length
+    #         else:
+    #             for shared in self.model[name].shared_quay_set[1:]:
+    #                 if self.model[shared].name == name or not self.model[shared].cut_possible:
+    #                     total_ship_length += sum(self.model[shared].length_occupied)
+    #                 total_quay_length += self.model[shared].length
+    #     if total_ship_length <= total_quay_length:
+    #         res = True
+    #
+    #     return res
 
     def check_narrow_quay(self, name):
         if name == "B1":
@@ -210,95 +212,94 @@ class Routing:
                     self.model["D1"].ship.interrupted = True
                     self.model["D1"].action.interrupt("1")
 
-    def put(self, ship, next_quay):
-        self.ship.main_quay = next_quay
-        self.ship.current_quay = []
-        if next_quay == "S":
-            ship.current_quay.append("S")
+    def put(self):
+        self.ship.current_quay = self.next_quay
+        # self.ship.current_quay = []
+        # if next_quay == "S":
+        #     ship.current_quay.append("S")
+        # else:
+        self.model[self.next_quay].occupied = True
+        if self.ship.current_work.cut == "S":
+            if self.ship.current_work.progress < self.ship.current_work.working_time - self.ship.current_work.duration_fix:
+                self.model[self.next_quay].cut_possible = True
+            else:
+                self.model[self.next_quay].cut_possible = False
+        elif self.ship.current_work.cut == "F":
+            if self.ship.current_work.progress >= self.ship.current_work.duration_fix:
+                self.model[self.next_quay].cut_possible = True
+            else:
+                self.model[self.next_quay].cut_possible = False
         else:
-            self.model[next_quay].occupied = True
-            if self.ship.current_work.cut == "S":
-                if self.ship.current_work.progress < self.ship.current_work.working_time - self.ship.current_work.duration_fix:
-                    self.model[next_quay].cut_possible = True
-                else:
-                    self.model[next_quay].cut_possible = False
-            elif self.ship.current_work.cut == "F":
-                if self.ship.current_work.progress >= self.ship.current_work.duration_fix:
-                    self.model[next_quay].cut_possible = True
-                else:
-                    self.model[next_quay].cut_possible = False
-            else:
-                self.model[next_quay].cut_possible = False
+            self.model[self.next_quay].cut_possible = False
 
-            if len(self.model[next_quay].shared_quay_set) == 1:
-                ship.current_quay.extend([next_quay])
-            elif len(self.model[next_quay].shared_quay_set) == 2:
-                if ship.length <= self.model[next_quay].length:
-                    ship.current_quay.extend([next_quay])
-                else:
-                    ship.current_quay.extend(self.model[next_quay].shared_quay_set)
-            elif len(self.model[next_quay].shared_quay_set) == 3:
-                if ship.length <= self.model[next_quay].length:
-                    ship.current_quay.extend([next_quay])
-                else:
-                    bef = self.model[next_quay].shared_quay_set[0]
-                    aft = self.model[next_quay].shared_quay_set[2]
-                    space_bef = ship.length + sum(self.model[bef].length_occupied) \
-                                - self.model[next_quay].length - self.model[bef].length
-                    space_aft = ship.length + sum(self.model[aft].length_occupied) \
-                                - self.model[next_quay].length - self.model[bef].length
-                    if space_bef >= 0 and space_aft >= 0:
-                        if space_bef >= space_aft:
-                            ship.current_quay.extend(self.model[next_quay].shared_quay_set[:2])
-                        else:
-                            ship.current_quay.extend(self.model[next_quay].shared_quay_set[1:])
-                    elif space_bef >= 0 and space_aft < 0:
-                        ship.current_quay.extend(self.model[next_quay].shared_quay_set[:2])
-                    elif space_bef < 0 and space_aft >= 0:
-                        ship.current_quay.extend(self.model[next_quay].shared_quay_set[1:])
-                    else:
-                        ship.current_quay.extend(self.model[next_quay].shared_quay_set)
-
-            if ship.length <= self.model[next_quay].length:
-                self.model[next_quay].length_occupied[self.model[next_quay].position] = ship.length
-            else:
-                self.model[next_quay].length_occupied[self.model[next_quay].position] = self.model[next_quay].length
-                remain = ship.length - self.model[next_quay].length
-                for i in ship.current_quay:
-                    if i != next_quay:
-                        idx = self.model[i].shared_quay_set.index(next_quay)
-                        if remain <= self.model[i].length - sum(self.model[i].length_occupied):
-                            self.model[i].length_occupied[idx] = remain
-                        else:
-                            self.model[i].length_occupied[idx] = self.model[i].length - sum(self.model[i].length_occupied)
-                            remain -= self.model[i].length - sum(self.model[i].length_occupied)
+            # if len(self.model[next_quay].shared_quay_set) == 1:
+            #     ship.current_quay.extend([next_quay])
+            # elif len(self.model[next_quay].shared_quay_set) == 2:
+            #     if ship.length <= self.model[next_quay].length:
+            #         ship.current_quay.extend([next_quay])
+            #     else:
+            #         ship.current_quay.extend(self.model[next_quay].shared_quay_set)
+            # elif len(self.model[next_quay].shared_quay_set) == 3:
+            #     if ship.length <= self.model[next_quay].length:
+            #         ship.current_quay.extend([next_quay])
+            #     else:
+            #         bef = self.model[next_quay].shared_quay_set[0]
+            #         aft = self.model[next_quay].shared_quay_set[2]
+            #         space_bef = ship.length + sum(self.model[bef].length_occupied) \
+            #                     - self.model[next_quay].length - self.model[bef].length
+            #         space_aft = ship.length + sum(self.model[aft].length_occupied) \
+            #                     - self.model[next_quay].length - self.model[bef].length
+            #         if space_bef >= 0 and space_aft >= 0:
+            #             if space_bef >= space_aft:
+            #                 ship.current_quay.extend(self.model[next_quay].shared_quay_set[:2])
+            #             else:
+            #                 ship.current_quay.extend(self.model[next_quay].shared_quay_set[1:])
+            #         elif space_bef >= 0 and space_aft < 0:
+            #             ship.current_quay.extend(self.model[next_quay].shared_quay_set[:2])
+            #         elif space_bef < 0 and space_aft >= 0:
+            #             ship.current_quay.extend(self.model[next_quay].shared_quay_set[1:])
+            #         else:
+            #             ship.current_quay.extend(self.model[next_quay].shared_quay_set)
+            #
+            # if ship.length <= self.model[next_quay].length:
+            #     self.model[next_quay].length_occupied[self.model[next_quay].position] = ship.length
+            # else:
+            #     self.model[next_quay].length_occupied[self.model[next_quay].position] = self.model[next_quay].length
+            #     remain = ship.length - self.model[next_quay].length
+            #     for i in ship.current_quay:
+            #         if i != next_quay:
+            #             idx = self.model[i].shared_quay_set.index(next_quay)
+            #             if remain <= self.model[i].length - sum(self.model[i].length_occupied):
+            #                 self.model[i].length_occupied[idx] = remain
+            #             else:
+            #                 self.model[i].length_occupied[idx] = self.model[i].length - sum(self.model[i].length_occupied)
+            #                 remain -= self.model[i].length - sum(self.model[i].length_occupied)
 
     def remove(self, quay_name):
         self.model[quay_name].occupied = False
         self.model[quay_name].cut_possible = False
-        for i in self.model[quay_name].ship.current_quay:
-            if i == self.model[quay_name].name:
-                self.model[quay_name].length_occupied[self.model[quay_name].position] = 0
-            else:
-                idx = self.model[i].shared_quay_set.index(quay_name)
-                self.model[i].length_occupied[idx] = 0
+        # for i in self.model[quay_name].ship.current_quay:
+        #     if i == self.model[quay_name].name:
+        #         self.model[quay_name].length_occupied[self.model[quay_name].position] = 0
+        #     else:
+        #         idx = self.model[i].shared_quay_set.index(quay_name)
+        #         self.model[i].length_occupied[idx] = 0
 
 
 class Quay:
-    def __init__(self, env, name, model, length, shared_quay_set, score_table, monitor):
+    def __init__(self, env, name, model, score_table, monitor):
         self.env = env  # simpy 시뮬레이션 환경
         self.name = name  # 안벽 번호
         self.model = model  # 전체 안벽에 대한 정보(모든 Quay 클래스의 객체를 갖고 있는 딕셔너리)
-        self.length = length  # 안벽의 길이
-        self.shared_quay_set = shared_quay_set
+        # self.shared_quay_set = shared_quay_set
         self.scores = score_table.to_dict()  # 해당 안벽에 대한 각 안벽 작업들의 점수
         self.monitor = monitor  # 이벤트의 기록을 위한 Monitor 클래스의 객체
 
         self.queue = simpy.Store(env)  # 안벽에서 작업을 수행할 선박을 넣어주는 simpy Store 객체
         self.ship = None  # 현재 안벽에 배치된 선박
         self.occupied = False  # 안벽의 점유 여부
-        self.length_occupied = [0 for _ in range(len(self.shared_quay_set))]
-        self.position = self.shared_quay_set.index(self.name)
+        # self.length_occupied = [0 for _ in range(len(self.shared_quay_set))]
+        # self.position = self.shared_quay_set.index(self.name)
         self.back = "0"
         self.cut_possible = False  # 현재 안벽에서 수행되는 작업에 대한 자르기 가능 여부
         self.working_start = 0.0  # 현재 안벽 작업의 시작 시간
@@ -355,12 +356,12 @@ class Quay:
             if not self.ship.interrupted:
                 self.occupied = False
                 self.cut_possible = False
-                for i in self.ship.current_quay:
-                    if i == self.name:
-                        self.length_occupied[self.position] = 0
-                    else:
-                        idx = self.model[i].shared_quay_set.index(self.name)
-                        self.model[i].length_occupied[idx] = 0
+                # for i in self.ship.current_quay:
+                #     if i == self.name:
+                #         self.length_occupied[self.position] = 0
+                #     else:
+                #         idx = self.model[i].shared_quay_set.index(self.name)
+                #         self.model[i].length_occupied[idx] = 0
             else:
                 if int(self.back) == 1:
                     self.ship.reserved = self.name

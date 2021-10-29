@@ -14,35 +14,35 @@ def import_train_data(info_path, scenario_path):
     df_work = pd.read_excel(scenario_path, sheet_name="작업리스트", engine='openpyxl')
     df_work_fixed = pd.read_excel(scenario_path, sheet_name="고정작업리스트", engine='openpyxl')
 
-    df_sharing = pd.DataFrame([["B2", "B3"], ["C1", "C3"], ["C2", "C4"], ["D3", "D5"], ["D1", "D2", "D4"]],
-                              columns=["공유1", "공유2", "공유3"])
-
-    df_quay["공유1"] = None
-    df_quay["공유2"] = None
-    df_quay["공유3"] = None
-    for i, row in df_quay.iterrows():
-        shared_quay_set = []
-
-        temp = df_sharing[(df_sharing["공유1"] == row["안벽"]) |
-                          (df_sharing["공유2"] == row["안벽"]) |
-                          (df_sharing["공유3"] == row["안벽"])].dropna(axis=1)
-        if len(temp) == 0:
-            shared_quay_set.append(row["안벽"])
-        else:
-            temp_trs = temp.values.tolist()[0]
-            if len(temp_trs) == 2:
-                shared_quay_set.extend(temp_trs)
-            elif len(temp_trs) == 3:
-                idx = temp_trs.index(row["안벽"])
-                if idx == 0:
-                    shared_quay_set.extend(temp_trs[:2])
-                elif idx == 1:
-                    shared_quay_set.extend(temp_trs)
-                else:
-                    shared_quay_set.extend(temp_trs[1:])
-
-        for j, quay in enumerate(shared_quay_set):
-            df_quay.loc[i, "공유{0}".format(j + 1)] = quay
+    # df_sharing = pd.DataFrame([["B2", "B3"], ["C1", "C3"], ["C2", "C4"], ["D3", "D5"], ["D1", "D2", "D4"]],
+    #                           columns=["공유1", "공유2", "공유3"])
+    #
+    # df_quay["공유1"] = None
+    # df_quay["공유2"] = None
+    # df_quay["공유3"] = None
+    # for i, row in df_quay.iterrows():
+    #     shared_quay_set = []
+    #
+    #     temp = df_sharing[(df_sharing["공유1"] == row["안벽"]) |
+    #                       (df_sharing["공유2"] == row["안벽"]) |
+    #                       (df_sharing["공유3"] == row["안벽"])].dropna(axis=1)
+    #     if len(temp) == 0:
+    #         shared_quay_set.append(row["안벽"])
+    #     else:
+    #         temp_trs = temp.values.tolist()[0]
+    #         if len(temp_trs) == 2:
+    #             shared_quay_set.extend(temp_trs)
+    #         elif len(temp_trs) == 3:
+    #             idx = temp_trs.index(row["안벽"])
+    #             if idx == 0:
+    #                 shared_quay_set.extend(temp_trs[:2])
+    #             elif idx == 1:
+    #                 shared_quay_set.extend(temp_trs)
+    #             else:
+    #                 shared_quay_set.extend(temp_trs[1:])
+    #
+    #     for j, quay in enumerate(shared_quay_set):
+    #         df_quay.loc[i, "공유{0}".format(j + 1)] = quay
 
     df_score = df_score.set_index(["선종", "작업"])
     df_weight = df_weight.set_index(["선종"])
