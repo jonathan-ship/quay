@@ -37,6 +37,7 @@ class Ship:
         self.reserved = None
         self.interrupted = False
         self.current_quay = None
+        self.move_cnt = 0
         #self.main_quay = None
         #self.current_quay = []
 
@@ -78,6 +79,7 @@ class Routing:
             if self.ship.fix_idx == len(self.ship.work_list):
                 self.update_possible_quay()
                 self.model["Sink"].put(self.ship)
+                self.ship.move_cnt += 1
             else:
                 self.indicator = True
                 self.update_possible_quay()
@@ -97,6 +99,7 @@ class Routing:
                     self.ship.wait = False
 
                 if self.current_quay != self.next_quay:
+                    self.ship.move_cnt += 1
                     if self.next_quay != "S" and self.model[self.next_quay].occupied:
                         self.remove(self.next_quay)
                         self.model[self.next_quay].ship.interrupted = True
@@ -105,6 +108,7 @@ class Routing:
                     self.check_narrow_quay(self.next_quay)
                 else:
                     if self.ship.interrupted:
+                        self.ship.move_cnt += 2
                         self.loss = True
                 self.move = {"ship_category": self.ship.category, "work_category": self.ship.current_work.name,
                              "previous": self.current_quay, "current": self.next_quay, "loss": self.loss}
