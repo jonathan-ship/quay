@@ -19,22 +19,22 @@ class QuayScheduling:
         self.frame = frame
 
         # self.state_size = len(self.df_weight["그룹"].unique()) * frame + len(self.df_quay) * 3 + 3
-        self.state_size = len(self.df_weight["그룹"].unique()) * frame + len(self.df_quay) + 1
-        self.action_size = len(self.df_quay) + 1
+        # self.state_size = len(self.df_weight["그룹"].unique()) * frame + len(self.df_quay) + 1
+        self.action_size = len(self.df_quay) * 3 + 1
 
         self.e = 0
-        self.total_score = 0.0
-        self.max_score = sum([max(df_score.loc[(row["선종"], row["작업명"])]) for i, row in self.df_work.iterrows()
-                          if row["작업명"] != "시운전" and row["작업명"] != "G/T"])
+        # self.total_score = 0.0
+        # self.max_score = sum([max(df_score.loc[(row["선종"], row["작업명"])]) for i, row in self.df_work.iterrows()
+        #                   if row["작업명"] != "시운전" and row["작업명"] != "G/T"])
         self.cnt_day = 0
-        self.cnt_total = 0
-        self.max_cnt_total = sum([df_weight["가중치"][row["선종"]] for i, row in self.df_work.iterrows()])
+        # self.cnt_total = 0
+        # self.max_cnt_total = sum([df_weight["가중치"][row["선종"]] for i, row in self.df_work.iterrows()])
         self.move_constraint = 5
         self.time = 0.0
-        self.w_move = 1.0
-        self.w_efficiency = 0.0
-        self.reward_move = 0.0
-        self.reward_efficiency = 0.0
+        # self.w_move = 1.0
+        # self.w_efficiency = 0.0
+        # self.reward_move = 0.0
+        # self.reward_efficiency = 0.0
         self.mapping = {i: row["안벽"] for i, row in self.df_quay.iterrows()}
         self.mapping[len(self.df_quay)] = "S"
         self.inverse_mapping = {y: x for x, y in self.mapping.items()}
@@ -54,10 +54,10 @@ class QuayScheduling:
         #     print(self.sim_env.now, self.mapping[action], self.model["Routing"].ship.current_work.name)
 
         if self.model["Routing"].current_quay != quay_name:
-            self.cnt_total += self.df_weight["가중치"][ship_category]
+            # self.cnt_total += self.df_weight["가중치"][ship_category]
             self.cnt_day += 1
-        if quay_name != "S":
-            self.total_score += self.model[quay_name].scores[ship_category, work_category]
+        # if quay_name != "S":
+        #     self.total_score += self.model[quay_name].scores[ship_category, work_category]
 
         # Run until next decision time step
         while True:
@@ -90,7 +90,7 @@ class QuayScheduling:
         self.e += 1
         self.sim_env, self.ships, self.model, self.monitor = self._modeling()
         self.done = False
-        self.move = 0
+        # self.move = 0
 
         # Go to first decision time step
         while True:
@@ -102,18 +102,18 @@ class QuayScheduling:
         return self._get_state()
 
     def _get_state(self):
-        f_0 = np.zeros((len(self.df_weight["그룹"].unique()), self.frame))  # 진수될 선박에 대한 정보
-        #f_1 = np.zeros(len(self.df_quay))  # 의사결정 시점에서 해당 작업의 각 안벽에 대한 선호도
-        f_2 = np.zeros(len(self.df_quay))  # 안벽 이동 가능 여부 (0.0, 0.25, 0.5, 0.75, 1.0)
+        # f_0 = np.zeros((len(self.df_weight["그룹"].unique()), self.frame))  # 진수될 선박에 대한 정보
+        # f_1 = np.zeros(len(self.df_quay))  # 의사결정 시점에서 해당 작업의 각 안벽에 대한 선호도
+        f_2 = np.zeros(len(self.df_quay) * 3)  # 안벽 이동 가능 여부 (0.0, 0.25, 0.5, 0.75, 1.0)
         #f_3 = np.zeros(len(self.df_quay)) # 해당 안벽에 작업되고 있는 작업의 해당 안벽에서의 선호도
         f_4 = np.zeros(1) # 하루 누적 이동횟수
         #f_5 = np.zeros(2) # 시뮬레이션 히스토리
 
-        for i, row in self.df_ship.iterrows():
-            if self.sim_env.now <= row["진수일"] < self.sim_env.now + self.duration:
-                row_idx = int(self.df_weight.loc[row["선종"], ["그룹"]])
-                col_idx = int((row["진수일"] - self.sim_env.now) * self.frame / self.duration)
-                f_0[row_idx, col_idx] += 1
+        # for i, row in self.df_ship.iterrows():
+        #     if self.sim_env.now <= row["진수일"] < self.sim_env.now + self.duration:
+        #         row_idx = int(self.df_weight.loc[row["선종"], ["그룹"]])
+        #         col_idx = int((row["진수일"] - self.sim_env.now) * self.frame / self.duration)
+        #         f_0[row_idx, col_idx] += 1
 
         decision_work_name = self.model["Routing"].ship.current_work.name  # 해당 안벽에서 작업중인 작업이름
         decision_category = self.model["Routing"].ship.category
@@ -124,14 +124,22 @@ class QuayScheduling:
 
                 if self.model["Routing"].possible_quay.get(quay_name):
                     if self.model["Routing"].possible_quay[quay_name] == 1:
-                        if self.df_weight["가중치"][self.model[quay_name].ship.category] == 3:
-                            f_2[idx] = 0.75
-                        elif self.df_weight["가중치"][self.model[quay_name].ship.category] == 4:
-                            f_2[idx] = 0.5
-                        elif self.df_weight["가중치"][self.model[quay_name].ship.category] == 6:
-                            f_2[idx] = 0.25
+                        f_2[3 * idx] = 1
                     elif self.model["Routing"].possible_quay[quay_name] == 2:
-                        f_2[idx] = 1
+                        f_2[3 * idx + 1] = 1
+                    else:
+                        f_2[3 * idx + 2] = 1
+
+                # if self.model["Routing"].possible_quay.get(quay_name):
+                #     if self.model["Routing"].possible_quay[quay_name] == 1:
+                #         if self.df_weight["가중치"][self.model[quay_name].ship.category] == 3:
+                #             f_2[idx] = 0.75
+                #         elif self.df_weight["가중치"][self.model[quay_name].ship.category] == 4:
+                #             f_2[idx] = 0.5
+                #         elif self.df_weight["가중치"][self.model[quay_name].ship.category] == 6:
+                #             f_2[idx] = 0.25
+                #     elif self.model["Routing"].possible_quay[quay_name] == 2:
+                #         f_2[idx] = 1
 
                 # if self.model[quay_name].occupied and int(self.model[quay_name].back) == 0:
                 #     category = self.model[quay_name].ship.category  # 해당 안벽에서 작업중인 선박의 선종
@@ -143,7 +151,7 @@ class QuayScheduling:
         # f_5[1] = self.total_score / self.max_score
 
         # state = np.concatenate((f_0.flatten(), f_1, f_2, f_3, f_4, f_5), axis=0)
-        state = np.concatenate((f_0.flatten(), f_2, f_4), axis=0)
+        state = np.concatenate((f_2, f_4), axis=0)
         return state
 
     def _calculate_reward(self):
@@ -154,24 +162,23 @@ class QuayScheduling:
         loss = self.model["Routing"].move["loss"]
 
         # 호선이동 횟수 역수할지 - 둘지 고민
-        reward_move = 0
+        reward = 0
         if loss:
-            reward_move = - 7 / 7
+            reward = - 1
         else:
             if previous_quay != current_quay:
                 if previous_quay != "Source":
-                    reward_move = - self.df_weight["가중치"][ship_category] / 7
+                    reward = - 1
             else:
-                reward_move = 0
+                reward = 0
         # 전문 안벽 배치율
-        reward_eff = 0
-        if current_quay != "S":
-            reward_eff = self.model[current_quay].scores[ship_category, work_category] / 1.5
-
-        self.reward_move = reward_move
-        self.reward_efficiency = reward_eff
-        reward = self.w_move * reward_move + self.w_efficiency * reward_eff
-
+        # reward_eff = 0
+        # if current_quay != "S":
+        #     reward_eff = self.model[current_quay].scores[ship_category, work_category] / 1.5
+        #
+        # self.reward_move = reward_move
+        # self.reward_efficiency = reward_eff
+        # reward = self.w_move * reward_move + self.w_efficiency * reward_eff
         return reward
 
     def _modeling(self):

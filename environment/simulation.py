@@ -38,6 +38,8 @@ class Ship:
         self.interrupted = False
         self.current_quay = None
         self.move_cnt = 0
+        self.quay_cnt = 0
+        self.total_time = 0
         #self.main_quay = None
         #self.current_quay = []
 
@@ -124,25 +126,76 @@ class Routing:
     def update_possible_quay(self):
         self.possible_quay = {}
         if self.ship.reserved != None:
-            self.possible_quay[self.ship.reserved] = 3
+            self.possible_quay[self.ship.reserved] = 2
             self.ship.reserved = None
             #self.model[self.ship.reserved].back = "0"
         else:
             if self.ship.current_work.name == "시운전" or self.ship.current_work.name == "G/T":
                 self.possible_quay["S"] = 2
             else:
+                possible_quay_A_or_B = {}
+                possible_quay_C = {}
+                possible_quay_D = {}
+                possible_quay_E = {}
                 for key, value in self.model.items():
                     if key in ["Source", "Sink", "Routing", "S"] or key in self.selected_quay:
                         continue
                     else:
-                        if self.model[key].scores[self.ship.category, self.ship.current_work.name] != 0.0:
+                        # if self.model[key].scores[self.ship.category, self.ship.current_work.name] != 0.0:
+                        #     if value.occupied and value.cut_possible:
+                        #         if value.back != "1":
+                        #             self.possible_quay[key] = 1
+                        #     elif not value.occupied:
+                        #         self.possible_quay[key] = 2
+                        if self.model[key].scores[self.ship.category, self.ship.current_work.name] == "A" \
+                                or self.model[key].scores[self.ship.category, self.ship.current_work.name] == "B":
                             if value.occupied and value.cut_possible:
                                 if value.back != "1":
-                                    self.possible_quay[key] = 1
+                                    possible_quay_A_or_B[key] = 1
                             elif not value.occupied:
-                                self.possible_quay[key] = 2
-                if len(self.possible_quay) == 0:
+                                    possible_quay_A_or_B[key] = 2
+                        elif self.model[key].scores[self.ship.category, self.ship.current_work.name] == "C":
+                            if value.occupied and value.cut_possible:
+                                if value.back != "1":
+                                    possible_quay_C[key] = 1
+                            elif not value.occupied:
+                                    possible_quay_C[key] = 2
+                        if self.model[key].scores[self.ship.category, self.ship.current_work.name] == "D":
+                            if value.occupied and value.cut_possible:
+                                if value.back != "1":
+                                    possible_quay_D[key] = 1
+                            elif not value.occupied:
+                                    possible_quay_D[key] = 2
+                        if self.model[key].scores[self.ship.category, self.ship.current_work.name] == "E":
+                            if value.occupied and value.cut_possible:
+                                if value.back != "1":
+                                    possible_quay_E[key] = 1
+                            elif not value.occupied:
+                                    possible_quay_E[key] = 2
+                cnt = 0
+                for quay, idx in possible_quay_A_or_B.items():
+                    self.possible_quay[quay] = idx
+                    if idx == 2:
+                        cnt += 1
+                if cnt == 0:
+                    for quay, idx in possible_quay_C.items():
+                        self.possible_quay[quay] = idx
+                        if idx == 2:
+                            cnt += 1
+                if cnt == 0:
+                    for quay, idx in possible_quay_D.items():
+                        self.possible_quay[quay] = idx
+                        if idx == 2:
+                            cnt += 1
+                if cnt == 0:
+                    for quay, idx in possible_quay_E.items():
+                        self.possible_quay[quay] = idx
+                        if idx == 2:
+                            cnt += 1
+                if cnt == 0:
                     self.possible_quay["S"] = 3
+                # if len(self.possible_quay) == 0:
+                #     self.possible_quay["S"] = 3
 
     # def check_shared_quay(self, name):
     #     res = False
@@ -345,12 +398,20 @@ class Quay:
                 # 현재 안벽(ex. B 안벽)에서 선박의 작업을 중단
                 self.monitor.record(self.env.now, "working interrupted", self.name, self.ship.name, self.ship.current_work.name)
                 self.ship.current_work.progress += (self.env.now - self.working_start)
+                self.ship.total_time += (self.env.now - self.working_start)
+                if self.scores[self.ship.category, self.ship.current_work.name] == "A" \
+                        or self.scores[self.ship.category, self.ship.current_work.name] == "B":
+                    self.ship.quay_cnt += (self.env.now - self.working_start)
                 self.back = i.cause
             else:
                 # 작업이 중간에 자르기 없이 완료된 경우
                 self.monitor.record(self.env.now, "working finish", self.name, self.ship.name, self.ship.current_work.name)
                 self.back = "0"
                 self.ship.current_work.progress += working_time
+                self.ship.total_time += working_time
+                if self.scores[self.ship.category, self.ship.current_work.name] == "A" \
+                        or self.scores[self.ship.category, self.ship.current_work.name] == "B":
+                    self.ship.quay_cnt += working_time
                 if self.ship.current_work.progress >= self.ship.current_work.working_time:
                     self.ship.current_work.done = True  # 작업의 완료
                     self.ship.fix_idx += 1  # 다음 작업의 인덱스

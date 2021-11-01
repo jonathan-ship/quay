@@ -51,7 +51,7 @@ class PPOAgent():
         self.date = datetime.now().strftime('%m%d_%H_%M')
         self.log_path = self.log_dir + 'ppo' + '/%s_train.csv' % self.date
         with open(self.log_path, 'w') as f:
-            f.write('episode, total reward, average loss, total move, total score\n')
+            f.write('episode, reward, average loss\n')
 
         self.avg_loss = 0.0
 
@@ -73,9 +73,9 @@ class PPOAgent():
 
         self.data = []
 
-    def record(self, episode, reward_sum, avg_loss, move, score):
+    def record(self, episode, reward_sum, avg_loss):
         with open(self.log_path, 'a') as f:
-            f.write('%d,%1.4f,%1.4f,%d,%d\n' % (episode, reward_sum, avg_loss, move, score))
+            f.write('%d,%1.4f,%1.4f\n' % (episode, reward_sum, avg_loss))
 
     def append_sample(self, state, action, reward, next_state, prob, mask, done):
         self.data.append((state, action, reward, next_state, prob, mask, done))
@@ -162,9 +162,9 @@ class PPOAgent():
 
                 self.train_model()
 
-            print('epside:%d/%d, total reward:%1.3f, average loss:%1.3f, total move:%1.3f, total score:%1.3f' %
-                  (e, num_of_episodes, total_reward, self.avg_loss / (self.K_epoch * step), total_move, total_score))
-            self.record(e, total_reward, self.avg_loss / (self.K_epoch * step), total_move, total_score)
+            print('epside:%d/%d, reward:%1.3f, average loss:%1.3f' %
+                  (e, num_of_episodes, total_reward, self.avg_loss / (self.K_epoch * step)))
+            self.record(e, total_reward, self.avg_loss / (self.K_epoch * step))
 
             if e % 100 == 0:
                 torch.save({'episode': e,
