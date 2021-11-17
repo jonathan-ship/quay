@@ -40,8 +40,7 @@ class Ship:
         self.move_cnt = 0
         self.quay_cnt = 0
         self.total_time = 0
-        #self.main_quay = None
-        #self.current_quay = []
+        self.quay_cnt_list = [0,0,0,0,0,0]
 
 
 class Routing:
@@ -403,15 +402,28 @@ class Quay:
                         or self.scores[self.ship.category, self.ship.current_work.name] == "B":
                     self.ship.quay_cnt += (self.env.now - self.working_start)
                 self.back = i.cause
+                levels =  ["A", "B", "C", "D", "E", "N"]
+                for level in levels:
+                    if self.scores[self.ship.category, self.ship.current_work.name] == level:
+                        self.ship.quay_cnt_list[levels.index(level)] += (self.env.now - self.working_start)
+
+
             else:
                 # 작업이 중간에 자르기 없이 완료된 경우
                 self.monitor.record(self.env.now, "working finish", self.name, self.ship.name, self.ship.current_work.name)
                 self.back = "0"
                 self.ship.current_work.progress += working_time
                 self.ship.total_time += working_time
+
                 if self.scores[self.ship.category, self.ship.current_work.name] == "A" \
                         or self.scores[self.ship.category, self.ship.current_work.name] == "B":
                     self.ship.quay_cnt += working_time
+
+                levels =  ["A", "B", "C", "D", "E", "N"]
+                for level in levels:
+                    if self.scores[self.ship.category, self.ship.current_work.name] == level:
+                        self.ship.quay_cnt_list[levels.index(level)] += (self.env.now - self.working_start)
+
                 if self.ship.current_work.progress >= self.ship.current_work.working_time:
                     self.ship.current_work.done = True  # 작업의 완료
                     self.ship.fix_idx += 1  # 다음 작업의 인덱스
